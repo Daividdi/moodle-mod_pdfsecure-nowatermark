@@ -1,0 +1,10 @@
+# Upstream archive of the bundled PDF.js build. The extracted, patched viewer
+# lives in pdfjs-drm/ and is what actually ships; keeping the 5.6 MB zip as well
+# doubles the clone for no benefit.
+pdfjs-*-dist.zip
+
+# Editor / OS noise
+.DS_Store
+._*
+*.swp
+*~
