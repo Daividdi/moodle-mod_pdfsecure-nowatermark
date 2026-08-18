@@ -42,8 +42,21 @@ number, installing it would upgrade cleanly but going back to the standard build
 would be blocked.
 
 That only works because the behaviour is decided at call time in
-`pdfsecure_stamp_mode()` rather than by an upgrade-time setting default. Swap the
-files, and the next request already behaves correctly.
+`pdfsecure_stamp_mode()` rather than by an upgrade-time setting default.
+
+**Reload PHP after swapping.** With OPcache on — which is every production
+install — the previously compiled `lib.php` keeps serving until OPcache
+revalidates, and `opcache.revalidate_freq` is 60 seconds on our servers. Measured:
+after replacing the files, the *old* build answered for the rest of that window, in
+both directions. It corrects itself, but during the gap the site is doing the
+opposite of what the files on disk say, which is exactly the kind of thing someone
+reads as "the swap did not work" and starts undoing. Make it deterministic:
+
+```bash
+systemctl reload apache2      # or: systemctl reload php8.3-fpm
+```
+
+A graceful reload is enough; no restart, no downtime.
 
 The two builds are told apart by `$plugin->release`, which Moodle shows in
 *Site administration → Plugins → Plugins overview*.

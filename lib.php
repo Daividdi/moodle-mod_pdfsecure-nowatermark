@@ -63,8 +63,12 @@ function pdfsecure_stamp_mode(): string {
     // and that is the whole trick that makes the two builds swappable: they carry the
     // SAME $plugin->version, so Moodle runs no upgrade step when one replaces the
     // other and therefore never applies a new setting default. Deciding at call time
-    // means the build behaves correctly the moment the files land, in either
-    // direction, with no upgrade and no downgrade.
+    // means the build behaves correctly as soon as the new code is in force, in
+    // either direction, with no upgrade and no downgrade.
+    //
+    // Caveat proven on a live install: OPcache serves the previously compiled
+    // lib.php until it revalidates (opcache.revalidate_freq, 60s on our servers),
+    // so reload PHP after swapping builds instead of trusting the file copy.
     return ($mode === 'full') ? 'full' : 'off';
 }
 
