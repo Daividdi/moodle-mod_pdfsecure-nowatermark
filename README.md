@@ -1,20 +1,11 @@
-# PDF Secure — no-watermark build (mod_pdfsecure)
-
-> **This is a variant build.** Same plugin, same component, **watermark off by
-> default**. It is for sites whose workstations already apply their own watermark,
-> so the install needs no configuration step. The canonical repository is
-> [moodle-mod_pdfsecure](https://github.com/Daividdi/moodle-mod_pdfsecure) — read
-> [VARIANT.md](VARIANT.md) before using this one.
+# PDF Secure (mod_pdfsecure)
 
 A Moodle activity module that serves course PDFs through an authenticated route the
-uploaded file itself never has, optionally with a **per-user watermark burned into
-the file**.
+uploaded file itself never has, with a **per-user watermark burned into the file**.
 
-In this build the watermark is **off** unless an administrator turns it on. The rest
-of this README describes the plugin in full, including stamping mode; the section
-[Turning the watermark off](#turning-the-watermark-off) explains exactly what the
-unmarked path does and does not change — that is the path this build takes by
-default.
+The watermark can be switched off for sites that already watermark at the endpoint —
+see [Turning the watermark off](#turning-the-watermark-off). Everything below
+describes the default, stamping mode.
 
 ![Moodle](https://img.shields.io/badge/Moodle-4.5%20%E2%80%93%205.2-orange.svg)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
@@ -134,7 +125,7 @@ The directory **must** be named `pdfsecure`.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| Watermark the documents | **No** *(this build; `Yes` in the canonical build)* | Turn on if this site should stamp after all. The appearance settings disappear while it is off. |
+| Watermark the documents | Yes | Turn off where the workstations already watermark — see below. The appearance settings disappear when it is off. |
 | Watermark tone | Light | Darker survives a low-quality photo better; lighter reads through more comfortably |
 | Watermark text size | 11 pt | Larger is more legible in a photo of the screen, and covers more of the page |
 | Include date in the diagonal watermark | On | The footer stamp always carries the date regardless |
@@ -169,10 +160,28 @@ Three things genuinely change, and two of them are improvements:
   on import. Unmarked delivery does not touch the file, and the size ceiling stops
   applying because nothing is held in memory.
 
-In the canonical build the default is **Yes** on purpose: a site upgrading from an
-earlier version never saved this setting, and a site that was stamping yesterday
-must still be stamping today. **This build inverts that**, which is the only reason
-it exists — see [VARIANT.md](VARIANT.md).
+The default is **Yes** on purpose: a site upgrading from an earlier version never
+saved this setting, and a site that was stamping yesterday must still be stamping
+today.
+
+#### A build with the default already inverted
+
+For sites that should never stamp, there is a variant build that ships with the
+watermark off and needs no configuration after install:
+[moodle-mod_pdfsecure-nowatermark](https://github.com/Daividdi/moodle-mod_pdfsecure-nowatermark).
+
+It is the **same component** with three lines changed, carrying the same
+`$plugin->version`, so the two builds replace each other by copying files — no
+upgrade, no downgrade, and activities keep working either way. **Reload PHP after
+swapping**: OPcache serves the previously compiled `lib.php` until it revalidates,
+so for up to `opcache.revalidate_freq` seconds the site does the opposite of what
+the files say. Prefer the setting
+above if the site is comfortable managing settings; prefer that build if it should
+not be possible to forget the step.
+
+**If you change this plugin, that repository has to be re-synced** — it ships a
+`sync-from-upstream.sh` for exactly that. A variant left behind is how a security
+plugin quietly diverges from the one under review.
 
 ---
 

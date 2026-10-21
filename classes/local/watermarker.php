@@ -207,7 +207,18 @@ class watermarker {
             $identity .= ' <' . $user->email . '>';
         }
 
-        $when = userdate(time(), '%Y-%m-%d %H:%M');
+        // A live PHP session can retain timezone=99 after an administrator
+        // changes the user's profile. Resolve that default from the database so
+        // the stamp follows the persisted user preference on the next view.
+        $timezone = $user->timezone ?? 99;
+        if ((string)$timezone === '99' || $timezone === '') {
+            global $DB;
+            $storedtimezone = $DB->get_field('user', 'timezone', ['id' => $user->id]);
+            if ($storedtimezone !== false && $storedtimezone !== '') {
+                $timezone = $storedtimezone;
+            }
+        }
+        $when = userdate(time(), '%Y-%m-%d %H:%M', $timezone, false);
 
         $tile = $identity;
         if (!empty($settings['includedate'])) {

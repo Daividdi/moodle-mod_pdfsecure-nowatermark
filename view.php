@@ -50,6 +50,10 @@ if ($file) {
     // carries nothing worth editing.
     $fileurl = moodle_url::make_pluginfile_url($context->id, 'mod_pdfsecure',
         'stamped', 0, '/', $file->get_filename());
+    // The stamped bytes contain the current minute, so the PDF URL must be unique
+    // for each page view. Otherwise PDF.js or an intermediary can reuse the previous
+    // response even though the pluginfile callback disables shared caching.
+    $fileurl->param('pdfsecureview', time() . '-' . bin2hex(random_bytes(4)));
     $viewerpath = $CFG->wwwroot . '/mod/pdfsecure/pdfjs-drm/web/viewer.html';
     
     // Forçando o idioma para Inglês

@@ -24,7 +24,7 @@ find "$HERE" -mindepth 1 -maxdepth 1 \
 cp -R "$TMP/up/." "$HERE/"
 
 python3 - "$HERE" <<'PY'
-import pathlib, sys
+import pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 
 def swap(relpath, old, new):
@@ -38,15 +38,37 @@ def swap(relpath, old, new):
     p.write_text(s.replace(old, new, 1))
     print(f"  {relpath}: patched")
 
-swap("lib.php",
-     "return ($mode === 'off') ? 'off' : 'full';",
-     "return ($mode === 'full') ? 'full' : 'off';")
+# lib.php: swap the whole comment + return, not just the return. Swapping only the
+# line left upstream's comment ("the default has to be the old behaviour") sitting on
+# top of the inverted code - a variant whose comment contradicts its own logic.
+VARIANT_COMMENT = "    // THIS BUILD INVERTS THE DEFAULT - see VARIANT.md. Unmarked unless an admin has\n    // explicitly asked for stamping.\n    //\n    // The fallback lives here in the code, not only in the setting's default value,\n    // and that is the whole trick that makes the two builds swappable: they carry the\n    // SAME $plugin->version, so Moodle runs no upgrade step when one replaces the\n    // other and therefore never applies a new setting default. Deciding at call time\n    // means the build behaves correctly as soon as the new code is in force, in\n    // either direction, with no upgrade and no downgrade.\n    //\n    // Caveat proven on a live install: OPcache serves the previously compiled\n    // lib.php until it revalidates (opcache.revalidate_freq, 60s on our servers),\n    // so reload PHP after swapping builds instead of trusting the file copy.\n"
+p = root / "lib.php"
+s = p.read_text()
+if "THIS BUILD INVERTS THE DEFAULT" in s and "return ($mode === 'full') ? 'full' : 'off';" in s:
+    print("  lib.php: already applied")
+else:
+    rx = re.compile(r"(    \$mode = get_config\('mod_pdfsecure', 'stampmode'\);\n)((?:    //.*\n)*)(    return \(\$mode === 'off'\) \? 'off' : 'full';)")
+    s2, n = rx.subn(lambda mm: mm.group(1) + VARIANT_COMMENT + "    return ($mode === 'full') ? 'full' : 'off';", s, count=1)
+    if n != 1:
+        sys.exit("ANCHOR MOVED in lib.php - pdfsecure_stamp_mode() changed upstream, fix the delta by hand")
+    p.write_text(s2)
+    print("  lib.php: patched")
 swap("settings.php",
      "get_string('settingstampmode_desc', 'mod_pdfsecure'),\n        'full',",
      "get_string('settingstampmode_desc', 'mod_pdfsecure'),\n        'off',")
-swap("version.php",
-     "$plugin->release   = 'v2.1.0';",
-     "$plugin->release   = 'v2.1.0-nowatermark';")
+# The release string changes with every upstream version, so anchor on the
+# $plugin->release line itself and append the suffix to whatever it holds.
+# (A literal 'v2.1.0' anchor broke the first sync after upstream bumped.)
+p = root / "version.php"
+s = p.read_text()
+if "-nowatermark'" in s:
+    print("  version.php: already applied")
+else:
+    s2, n = re.subn(r"(\$plugin->release\s*=\s*')([^']+)(';)", r"\1\2-nowatermark\3", s, count=1)
+    if n != 1:
+        sys.exit("ANCHOR MOVED in version.php - no $plugin->release line, fix the delta by hand")
+    p.write_text(s2)
+    print("  version.php: patched")
 PY
 
 echo "Synced from ${UPSTREAM}@${REF}. Review the diff before committing."

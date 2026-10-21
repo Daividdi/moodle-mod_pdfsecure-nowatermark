@@ -22,13 +22,18 @@ component identical is what makes this build a drop-in.
 
 ## The entire difference
 
-Three lines, and nothing else:
+Three changes, and nothing else:
 
 | File | Standard build | This build |
 | --- | --- | --- |
-| `lib.php` → `pdfsecure_stamp_mode()` | `($mode === 'off') ? 'off' : 'full'` | `($mode === 'full') ? 'full' : 'off'` |
+| `lib.php` → `pdfsecure_stamp_mode()` | `($mode === 'off') ? 'off' : 'full'` | `($mode === 'full') ? 'full' : 'off'` (plus the comment above it, which explains the inversion) |
 | `settings.php` → `stampmode` default | `'full'` | `'off'` |
-| `version.php` → `$plugin->release` | `v2.1.0` | `v2.1.0-nowatermark` |
+| `version.php` → `$plugin->release` | upstream release (e.g. `v2.1.1`) | same + `-nowatermark` (e.g. `v2.1.1-nowatermark`) |
+
+`sync-from-upstream.sh` re-applies all three. The `lib.php` delta swaps the comment
+together with the line: swapping only the line leaves upstream's comment ("the default
+has to be the old behaviour") on top of inverted code. The `version.php` delta anchors on
+the `$plugin->release` line, not on a literal version, so upstream bumps do not break it.
 
 ## Why `$plugin->version` is deliberately identical
 
