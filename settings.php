@@ -22,13 +22,20 @@
  * documents, and nobody should have to edit PHP to retune it.
  *
  * @package    mod_pdfsecure
- * @copyright  2026 Aditek / Angel Aligner
+ * @copyright  2026 Angel Aligner
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
 if ($ADMIN->fulltree) {
+
+    $settings->add(new admin_setting_configcheckbox(
+        'mod_pdfsecure/onlysecure',
+        get_string('settingonlysecure', 'mod_pdfsecure'),
+        get_string('settingonlysecure_desc', 'mod_pdfsecure'),
+        0
+    ));
 
     // Not every site wants the stamp. Where the workstations already apply their own
     // watermark, ours lands on top of theirs: two overlapping marks, a document that

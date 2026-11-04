@@ -24,19 +24,23 @@ namespace mod_pdfsecure\local;
  * carries the identity of the account that fetched it.
  *
  * The original upload is never modified and never served - see
- * pdfsecure_pluginfile(). The stamped copy is produced on FIRST VIEW, per user,
- * and cached. It cannot be produced at upload time, because at upload time there
- * is no reader to name yet; that is also why newly uploaded files are covered
- * automatically, with no batch step.
+ * pdfsecure_pluginfile(). The stamped copy is produced on EVERY VIEW and not stored.
+ * It cannot be produced at upload time, because at upload time there is no reader
+ * to name yet; that is also why newly uploaded files are covered automatically,
+ * with no batch step. A PDF the free parser refuses is stamped from a rewritten
+ * copy - see normalized_copy().
  *
  * @package    mod_pdfsecure
- * @copyright  2026 Aditek / Angel Aligner
+ * @copyright  2026 Angel Aligner
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class watermarker {
 
     /** Filearea holding the generated per-user derivatives. */
     const AREA = 'watermarked';
+
+    /** Filearea holding the rewritten copy of a PDF FPDI cannot read as uploaded. */
+    const NORMALIZED_AREA = 'normalized';
 
     /**
      * Bump when the rendering CODE changes.
@@ -166,14 +170,37 @@ class watermarker {
         // the path from dirroot yields public/public/... and fails.
         require_once(__DIR__ . '/../../vendor/autoload.php');
 
-        // FPDI cannot read encrypted PDFs and drops annotations, links and form
-        // fields on import - acceptable for reading material. Anything it refuses
+        // FPDI drops annotations, links and form fields on import - acceptable for
+        // reading material. Anything it still refuses after the Ghostscript rewrite
         // raises, and the caller fails closed rather than serving the original.
         $tmp = make_request_directory() . '/source.pdf';
         $source->copy_content_to($tmp);
 
         $stamp = self::build_stamp($user, $cmid, $settings);
 
+        try {
+            return self::stamp_file($tmp, $stamp, $settings);
+        } catch (\setasign\Fpdi\PdfParser\PdfParserException $e) {
+            // Mostly PDF 1.5+ cross-reference streams, which current exporters write and
+            // the free FPDI parser refuses. Stamp a rewritten copy instead.
+            $normalized = self::normalized_copy($source);
+            if ($normalized === null) {
+                throw $e;
+            }
+            $normalized->copy_content_to($tmp);
+            return self::stamp_file($tmp, $stamp, $settings);
+        }
+    }
+
+    /**
+     * Stamps every page of a file FPDI can read.
+     *
+     * @param string $path
+     * @param array $stamp
+     * @param array $settings
+     * @return string raw PDF
+     */
+    protected static function stamp_file(string $path, array $stamp, array $settings): string {
         $pdf = new watermark_pdf();
         $pdf->SetAutoPageBreak(false);
         $pdf->SetCreator('mod_pdfsecure');
@@ -181,7 +208,7 @@ class watermarker {
         $pdf->SetAuthor(self::enc($stamp['identity']));
         $pdf->SetSubject(self::enc($stamp['footer']));
 
-        $pages = $pdf->setSourceFile($tmp);
+        $pages = $pdf->setSourceFile($path);
         for ($p = 1; $p <= $pages; $p++) {
             $tplid = $pdf->importPage($p);
             $size = $pdf->getTemplateSize($tplid);
@@ -191,6 +218,116 @@ class watermarker {
         }
 
         return $pdf->Output('S');
+    }
+
+    /**
+     * Whether this PDF can be stamped for a reader, rewriting it first if needed.
+     *
+     * @param \stored_file $file the uploaded PDF, in any file area
+     * @return bool
+     */
+    public static function can_stamp(\stored_file $file): bool {
+        if (self::too_big($file)) {
+            return false;
+        }
+        require_once(__DIR__ . '/../../vendor/autoload.php');
+        $dir = make_request_directory();
+        $file->copy_content_to($dir . '/check.pdf');
+        if (self::fpdi_reads($dir . '/check.pdf')) {
+            return true;
+        }
+        return self::ghostscript_rewrite($dir . '/check.pdf', $dir . '/out.pdf')
+            && self::fpdi_reads($dir . '/out.pdf');
+    }
+
+    /**
+     * Whether this file is over the size the site agrees to stamp.
+     *
+     * @param \stored_file $file
+     * @return bool
+     */
+    public static function too_big(\stored_file $file): bool {
+        return $file->get_filesize() > (int)(get_config('mod_pdfsecure', 'maxstampbytes') ?: 41943040);
+    }
+
+    /**
+     * Returns the rewritten copy FPDI can read, creating it on first use.
+     *
+     * Stored rather than rendered per view: Ghostscript takes seconds where FPDI takes
+     * milliseconds. The area is as unaddressable as `content`, because
+     * pdfsecure_pluginfile() serves `stamped` only.
+     *
+     * @param \stored_file $source the original uploaded PDF
+     * @return \stored_file|null null when Ghostscript cannot rewrite it
+     */
+    protected static function normalized_copy(\stored_file $source): ?\stored_file {
+        $fs = get_file_storage();
+        $name = $source->get_contenthash() . '.pdf';
+        $existing = $fs->get_file($source->get_contextid(), 'mod_pdfsecure', self::NORMALIZED_AREA, 0, '/', $name);
+        if ($existing) {
+            return $existing;
+        }
+
+        $dir = make_request_directory();
+        $source->copy_content_to($dir . '/in.pdf');
+        if (!self::ghostscript_rewrite($dir . '/in.pdf', $dir . '/out.pdf') || !self::fpdi_reads($dir . '/out.pdf')) {
+            return null;
+        }
+
+        // The activity's file was replaced, so a copy of the previous one is garbage.
+        $fs->delete_area_files($source->get_contextid(), 'mod_pdfsecure', self::NORMALIZED_AREA, 0);
+        try {
+            return $fs->create_file_from_pathname([
+                'contextid' => $source->get_contextid(),
+                'component' => 'mod_pdfsecure',
+                'filearea'  => self::NORMALIZED_AREA,
+                'itemid'    => 0,
+                'filepath'  => '/',
+                'filename'  => $name,
+                'mimetype'  => 'application/pdf',
+            ], $dir . '/out.pdf');
+        } catch (\stored_file_creation_exception $e) {
+            // Two first readers at once: the other request stored it.
+            return $fs->get_file($source->get_contextid(), 'mod_pdfsecure', self::NORMALIZED_AREA, 0, '/', $name) ?: null;
+        }
+    }
+
+    /**
+     * Whether the free FPDI parser can open this file.
+     *
+     * @param string $path
+     * @return bool
+     */
+    protected static function fpdi_reads(string $path): bool {
+        try {
+            $pdf = new watermark_pdf();
+            $pages = $pdf->setSourceFile($path);
+            for ($p = 1; $p <= $pages; $p++) {
+                $pdf->importPage($p);
+            }
+            return $pages > 0;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Rewrites a PDF to version 1.4 (classic cross-reference table) with Ghostscript.
+     *
+     * @param string $in
+     * @param string $out
+     * @return bool
+     */
+    protected static function ghostscript_rewrite(string $in, string $out): bool {
+        global $CFG;
+        if (empty($CFG->pathtogs) || !is_executable($CFG->pathtogs)) {
+            return false;
+        }
+        $command = escapeshellarg($CFG->pathtogs)
+            . ' -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pdfwrite -dCompatibilityLevel=1.4'
+            . ' -sOutputFile=' . escapeshellarg($out) . ' ' . escapeshellarg($in) . ' 2>&1';
+        exec($command, $output, $status);
+        return $status === 0 && is_file($out) && filesize($out) > 0;
     }
 
     /**

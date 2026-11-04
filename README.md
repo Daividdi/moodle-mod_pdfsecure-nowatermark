@@ -103,9 +103,20 @@ order to obtain a copy stamped with a colleague's name.
 
 FPDI and FPDF are bundled in `vendor/` — no Composer step is needed on the server.
 
-**Known limitation of the PDF engine:** FPDI cannot read encrypted PDFs, and
-importing drops annotations, links, bookmarks and form fields. For reading material
-this is usually fine; if your PDFs are interactive forms, test before rolling out.
+- Ghostscript, at the path in *Site administration › Server › System paths* (`pathtogs`), to stamp PDFs the
+  bundled parser cannot read
+
+**PDFs FPDI cannot read (v2.3.1).** The free FPDI parser refuses PDF 1.5+ cross-reference streams, which most
+current exporters write. Such a file is rewritten once with Ghostscript into the `normalized` file area, which has
+no URL, and every reader's copy is stamped from it. The upload stays untouched in `content`. To diagnose a PDF that
+gives a 404, call `watermarker::render_for()` from the CLI and read the exception.
+
+**What is still refused:** a password-protected or damaged PDF, a file over the size limit, and any file needing a
+rewrite when Ghostscript is missing. The activity form and drag-and-drop refuse these with a message. A file that
+reaches the viewer anyway fails closed: it is never served unstamped.
+
+**Known limitation of the PDF engine:** importing drops annotations, links, bookmarks and form fields. For reading
+material this is usually fine; if your PDFs are interactive forms, test before rolling out.
 
 ---
 
@@ -131,6 +142,31 @@ The directory **must** be named `pdfsecure`.
 | Include date in the diagonal watermark | On | The footer stamp always carries the date regardless |
 | Show footer stamp | On | The legible line meant to be read by eye when tracing a leak |
 | Largest document to stamp | 40 MB | A document is held in memory while stamped, and that happens on every view. Larger files are refused rather than allowed to exhaust the PHP memory limit on each read. |
+
+### Only PDF Secure
+
+Turn on **PDFs only as PDF Secure** to keep PDFs in Moodle's native **File** and
+**Folder** activities from being served as ordinary files. The setting is off by
+default, so an upgrade keeps the existing behavior until an administrator enables it.
+
+With the setting on, Moodle rejects a PDF in a File or Folder activity form before
+the activity is saved and offers PDF Secure when a `.pdf` is dragged onto a course.
+If another path creates or updates a File or Folder containing a PDF — such as
+drag-and-drop chosen as File, Folder editing, restore, import or a web service — an
+event queues conversion, and an hourly sweep catches anything an event missed. A
+PDFProtect activity is also converted when that module is installed. A
+File becomes one PDF Secure activity immediately after it, with its visibility,
+availability and completion carried over. Each PDF in a Folder gets
+its own activity in folder order. The original activity is kept and hidden only
+after the protected copy is confirmed; a Folder stays visible while it contains
+anything besides PDFs, and confirmed PDFs are removed from a mixed Folder while its
+other files remain.
+
+This applies to Moodle's File and Folder activities and installed PDFProtect
+activities. It does not change PDFs in forum posts, assignment submissions,
+interactive videos or certificates. The
+`tools/migrate_pdf.php` administrator migration remains available for an explicit
+run on `resource`, `folder` and installed `pdfprotect` activities.
 
 ### Turning the watermark off
 
@@ -182,6 +218,25 @@ not be possible to forget the step.
 **If you change this plugin, that repository has to be re-synced** — it ships a
 `sync-from-upstream.sh` for exactly that. A variant left behind is how a security
 plugin quietly diverges from the one under review.
+
+---
+
+## Completion: reading to the end (v2.2.0)
+
+An activity can complete on view, or only when the person has **read the document**:
+at least 90 % of its pages, the last one included. The pdf.js viewer reports the pages
+shown, and a page counts once it has stayed in front of the reader for 1.5 seconds,
+so scrolling straight to the end reads nothing in between. Progress is kept per person
+(`pdfsecure_progress`), backed up with user data and exported/deleted by the privacy
+API, as are the per-person stamped copies.
+
+What it does not do: the page total comes from the viewer, so someone forging the
+web service call by hand could claim a one-page document. For internal training that
+is an accepted limit; the gamification on top of it (local_escalada) rewards the
+completion like any other.
+
+Switch it on per activity under *Completion conditions → Read to the end*, or for many
+activities at once with Moodle's bulk edit of activity completion.
 
 ---
 

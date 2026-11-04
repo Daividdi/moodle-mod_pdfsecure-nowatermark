@@ -28,4 +28,13 @@ $tasks = [
         'dayofweek' => '*',
         'month'     => '*',
     ],
+    [
+        'classname' => 'mod_pdfsecure\\task\\sweep_plain_pdfs',
+        'blocking'  => 0,
+        'minute'    => '17',
+        'hour'      => '*',
+        'day'       => '*',
+        'dayofweek' => '*',
+        'month'     => '*',
+    ],
 ];

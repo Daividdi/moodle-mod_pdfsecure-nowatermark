@@ -2,8 +2,7 @@
 /**
  * Migra atividades de um modulo de PDF de terceiro para mod_pdfsecure.
  *
- * Generico: a origem e um parametro, nao esta cravada no codigo. Na Malasia a
- * origem foi mod_pdfprotect; na WuXi sera o que o levantamento apontar.
+ * Generico: a origem e um parametro, nao esta cravada no codigo.
  *
  * Por que existe: plugins de PDF de terceiro costumam nao ter area de busca
  * (classes/search/), entao o Moodle nunca entrega os arquivos deles ao
@@ -78,6 +77,39 @@ if (!$modpdfsecure) {
 $dry = empty($opt['commit']);
 $fs  = get_file_storage();
 
+// Native File, Folder and the installed pdfprotect source share the converter.
+if (in_array($source, ['resource', 'folder', 'pdfprotect'], true)) {
+    $cmids = \mod_pdfsecure\local\converter::candidate_coursemodule_ids($source, (int)$opt['course']);
+    cli_heading(($dry ? 'SIMULACAO (nada sera gravado)' : 'MIGRACAO REAL') . " -- origem: {$source}");
+    cli_writeln(count($cmids) . " atividades {$source} com PDF encontradas.\n");
+    $created = $processed = $errors = 0;
+
+    foreach ($cmids as $cmid) {
+        if ($opt['limit'] && $processed >= $opt['limit']) {
+            cli_writeln("-- limite de {$opt['limit']} atividades atingido.");
+            break;
+        }
+        try {
+            $result = \mod_pdfsecure\local\converter::convert_coursemodule($cmid, true, $dry);
+            $processed++;
+            $created += (int)($result['created'] ?? 0);
+            cli_writeln(sprintf("%-24s cm %s; novas atividades: %d",
+                $result['status'] ?? 'processed', $cmid, (int)($result['created'] ?? 0)));
+        } catch (Throwable $e) {
+            $errors++;
+            cli_writeln("        !! ERRO cm {$cmid}: " . $e->getMessage());
+        }
+    }
+
+    cli_writeln("\n  processadas: {$processed}");
+    cli_writeln("  atividades PDF Secure novas: {$created}");
+    cli_writeln("  erros: {$errors}");
+    if ($dry) {
+        cli_writeln("\n  SIMULACAO -- nada foi gravado. Rode com --commit para valer.");
+    }
+    exit($errors ? 1 : 0);
+}
+
 /** O arquivo do pdfsecure vive em mod_pdfsecure/content, itemid 0, na raiz. */
 function pdfsecure_arquivo($fs, $cmid) {
     $ctx  = context_module::instance($cmid);
@@ -89,9 +121,8 @@ function pdfsecure_arquivo($fs, $cmid) {
  * Acha o PDF do plugin de origem naquele contexto.
  *
  * Procura por componente, sem fixar filearea nem itemid, porque cada plugin
- * de terceiro guarda de um jeito -- o pdfprotect usa content/0, outros usam o
- * id da instancia como itemid. Filtrar so por componente e extensao cobre
- * todos sem precisar saber o layout de cada um.
+ * de terceiro guarda de um jeito. Filtrar so por componente e extensao cobre
+ * os layouts mais comuns sem precisar conhecer o armazenamento do plugin.
  */
 function origem_pdf($DB, $fs, $ctxid, $source) {
     $recs = $DB->get_records_select('files',

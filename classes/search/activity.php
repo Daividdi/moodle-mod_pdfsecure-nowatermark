@@ -31,7 +31,7 @@ defined('MOODLE_INTERNAL') || die();
  * no URL is involved and nothing is loosened to make search work.
  *
  * @package    mod_pdfsecure
- * @copyright  2026 Aditek / Angel Aligner
+ * @copyright  2026 Angel Aligner
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class activity extends \core_search\base_activity {

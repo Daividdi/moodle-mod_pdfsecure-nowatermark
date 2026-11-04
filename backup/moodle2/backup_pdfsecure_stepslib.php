@@ -21,15 +21,24 @@ class backup_pdfsecure_activity_structure_step extends backup_activity_structure
      * @return backup_nested_element
      */
     protected function define_structure() {
+        $userinfo = $this->get_setting_value('userinfo');
 
-        // Este modulo nao guarda dado por usuario: nao ha tentativas, notas nem
-        // estado individual - so o PDF e a descricao. Por isso a estrutura nao
-        // ramifica em userinfo.
         $pdfsecure = new backup_nested_element('pdfsecure', ['id'], [
-            'name', 'intro', 'introformat', 'timecreated', 'timemodified',
+            'name', 'intro', 'introformat', 'timecreated', 'timemodified', 'completionreadall',
+        ]);
+        $progresscontainer = new backup_nested_element('progressrows');
+        $progress = new backup_nested_element('progress', ['id'], [
+            'userid', 'pages', 'seen', 'timemodified', 'timecompleted',
         ]);
 
+        $pdfsecure->add_child($progresscontainer);
+        $progresscontainer->add_child($progress);
+
         $pdfsecure->set_source_table('pdfsecure', ['id' => backup::VAR_ACTIVITYID]);
+        if ($userinfo) {
+            $progress->set_source_table('pdfsecure_progress', ['pdfsecureid' => backup::VAR_PARENTID]);
+        }
+        $progress->annotate_ids('user', 'userid');
 
         // 'intro' e obrigatorio por causa de FEATURE_MOD_INTRO; 'content' e a
         // filearea onde mod_form.php grava o PDF (itemid 0, ver lib.php:21).

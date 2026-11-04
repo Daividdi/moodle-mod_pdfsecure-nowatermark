@@ -1,6 +1,7 @@
 <?php
 require('../../config.php');
 require_once('lib.php');
+require_once($CFG->libdir . '/completionlib.php');
 
 $id = required_param('id', PARAM_INT); // ID do Course Module
 
@@ -22,6 +23,22 @@ $PAGE->set_url('/mod/pdfsecure/view.php', array('id' => $cm->id));
 $PAGE->set_title(format_string($pdfsecure->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
+
+$event = \mod_pdfsecure\event\course_module_viewed::create([
+    'objectid' => $pdfsecure->id,
+    'context' => $context,
+]);
+$event->add_record_snapshot('course_modules', $cm);
+$event->add_record_snapshot('course', $course);
+$event->add_record_snapshot('pdfsecure', $pdfsecure);
+$event->trigger();
+
+$completion = new completion_info($course);
+$completion->set_module_viewed($cm);
+
+if (!empty($pdfsecure->completionreadall)) {
+    $PAGE->requires->js_call_amd('mod_pdfsecure/progress', 'init', [$cm->id]);
+}
 
 echo $OUTPUT->header();
 
@@ -69,9 +86,13 @@ if ($file) {
         }
     </style>
 
-    <div style="position: relative; width: 100%; height: 800px; border: 1px solid #ccc; margin-top: 20px; overflow: hidden; user-select: none;">
+    <div style="position: relative; width: 100%; height: 800px; border: 1px solid #ccc;
+                margin-top: 20px; overflow: hidden; user-select: none;">
         
-        <iframe id="pdf-iframe" src="<?php echo $viewerurl; ?>#toolbar=0" width="100%" height="100%" style="border:none; position: absolute; z-index: 1;" onload="secureIframe()"></iframe>
+        <iframe id="pdf-iframe" src="<?php echo $viewerurl; ?>#toolbar=0"
+                width="100%" height="100%"
+                style="border:none; position: absolute; z-index: 1;"
+                onload="secureIframe()"></iframe>
         
         <?php
         // O overlay CSS de marca d'agua foi REMOVIDO em 2026-08-07.
@@ -123,8 +144,14 @@ if ($file) {
                     var style = innerDoc.createElement('style');
                     style.innerHTML = `
                         /* CORREÇÃO 2: Destruição dos botões de Tela Cheia (#presentationMode, #secondaryPresentationMode) */
-                        #print, #download, #secondaryPrint, #secondaryDownload, #openFile, #secondaryOpenFile, .print, .download, #presentationMode, #secondaryPresentationMode, .presentationMode { display: none !important; }
-                        body, .textLayer { user-select: none !important; -webkit-user-select: none !important; cursor: default !important; }
+                        #print, #download, #secondaryPrint, #secondaryDownload, #openFile,
+                        #secondaryOpenFile, .print, .download, #presentationMode,
+                        #secondaryPresentationMode, .presentationMode { display: none !important; }
+                        body, .textLayer {
+                            user-select: none !important;
+                            -webkit-user-select: none !important;
+                            cursor: default !important;
+                        }
                         @media print { body { display: none !important; } }
                     `;
                     innerDoc.head.appendChild(style);

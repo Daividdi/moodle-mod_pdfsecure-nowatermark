@@ -27,7 +27,7 @@ namespace mod_pdfsecure\task;
  * This task exists to clear them and can be removed once every install has run it.
  *
  * @package    mod_pdfsecure
- * @copyright  2026 Aditek / Angel Aligner
+ * @copyright  2026 Angel Aligner
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class prune_derivatives extends \core\task\scheduled_task {
