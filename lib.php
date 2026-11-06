@@ -55,6 +55,22 @@ function pdfsecure_get_coursemodule_info($coursemodule) {
  * @param moodleform_mod|null $mform Activity form.
  * @return int New activity instance ID.
  */
+/**
+ * Blank the Author of the activity's PDFs: Moodle fills it with the uploader's name,
+ * which is not the article's author and which teachers kept deleting by hand.
+ *
+ * @param context_module $context Activity context.
+ * @return void
+ */
+function pdfsecure_clear_authors(context_module $context): void {
+    $files = get_file_storage()->get_area_files($context->id, 'mod_pdfsecure', 'content', 0, 'id', false);
+    foreach ($files as $file) {
+        if ((string)$file->get_author() !== '') {
+            $file->set_author('');
+        }
+    }
+}
+
 function pdfsecure_add_instance($pdfsecure, $mform = null) {
     global $DB;
     $pdfsecure->completionreadall = isset($pdfsecure->completionreadall)
@@ -74,6 +90,7 @@ function pdfsecure_add_instance($pdfsecure, $mform = null) {
             0,
             ['subdirs' => 0, 'maxfiles' => -1]
         );
+        pdfsecure_clear_authors($context);
     }
     return $pdfsecure->id;
 }
@@ -104,6 +121,7 @@ function pdfsecure_update_instance($pdfsecure, $mform = null) {
             0,
             ['subdirs' => 0, 'maxfiles' => -1]
         );
+        pdfsecure_clear_authors($context);
         // Rebuilt on next use. Clear derivatives together so removed/changed sources cannot remain stale.
         $fs = get_file_storage();
         $fs->delete_area_files($context->id, 'mod_pdfsecure', \mod_pdfsecure\local\watermarker::NORMALIZED_AREA);
@@ -318,6 +336,7 @@ function pdfsecure_dndupload_handle($uploadinfo) {
         0,
         ['subdirs' => 0, 'maxfiles' => -1]
     );
+    pdfsecure_clear_authors($context);
 
     $storedfiles = get_file_storage()->get_area_files($context->id, 'mod_pdfsecure', 'content', 0, 'sortorder', false);
     $storedpdf = false;

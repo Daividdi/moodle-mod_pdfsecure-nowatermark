@@ -1,0 +1,4 @@
+/* PDF Secure form: the file Author field is cleared on save (lib.php), so it is not shown. */
+#page-mod-pdfsecure-mod .fp-setauthor {
+    display: none;
+}

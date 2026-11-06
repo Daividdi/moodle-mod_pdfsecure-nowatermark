@@ -41,6 +41,8 @@ final class content_files {
             }
             $pdfs[$file->get_filename()] = $file;
         }
+        // Natural order, so "2 ..." comes before "10 ...": teachers order the list by numbering names.
+        uksort($pdfs, 'strnatcasecmp');
         return $pdfs;
     }
 

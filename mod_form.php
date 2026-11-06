@@ -45,6 +45,13 @@ class mod_pdfsecure_mod_form extends moodleform_mod {
      */
     public function data_preprocessing(&$defaultvalues) {
         parent::data_preprocessing($defaultvalues);
+        // Load the PDFs already saved, so editing shows them and lets the teacher delete or rename them.
+        $draftitemid = file_get_submitted_draft_itemid('pdf_file');
+        if ($this->current->instance) {
+            file_prepare_draft_area($draftitemid, $this->context->id, 'mod_pdfsecure', 'content', 0,
+                ['subdirs' => 0, 'maxfiles' => -1]);
+        }
+        $defaultvalues['pdf_file'] = $draftitemid;
         $fieldname = 'completionreadall' . $this->get_suffix();
         if (!array_key_exists($fieldname, $defaultvalues)) {
             $defaultvalues[$fieldname] = isset($defaultvalues['completionreadall'])
@@ -112,7 +119,9 @@ class mod_pdfsecure_mod_form extends moodleform_mod {
         
         $mform->addElement('filemanager', 'pdf_file', get_string('selectfile', 'mod_pdfsecure'), null,
             array('subdirs' => 0, 'maxbytes' => $CFG->maxbytes, 'maxfiles' => -1,
-                  'accepted_types' => array('.pdf'))
+                  'accepted_types' => array('.pdf'),
+                  // Blank by default: the uploader's name is not the article's author.
+                  'author' => '')
         );
         $mform->addRule('pdf_file', null, 'required', null, 'client');
 
