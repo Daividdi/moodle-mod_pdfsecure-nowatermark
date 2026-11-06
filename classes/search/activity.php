@@ -52,8 +52,8 @@ class activity extends \core_search\base_activity {
      * `watermarked` is deliberately absent. It holds one stamped copy per user of
      * the same document: indexing it would multiply every PDF by the number of
      * readers, filling the index with duplicates that differ only by the name
-     * burned into them. The original in `content` carries the same text and exists
-     * exactly once.
+     * burned into them. The original files in `content` are indexed once each by
+     * base_activity::attach_files, including every file in a multi-PDF activity.
      *
      * @return string[]
      */

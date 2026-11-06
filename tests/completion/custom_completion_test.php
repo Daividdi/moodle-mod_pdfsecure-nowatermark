@@ -50,11 +50,21 @@ final class custom_completion_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_user();
         $completion = new custom_completion($cm, $user->id);
 
+        get_file_storage()->create_file_from_string([
+            'contextid' => \context_module::instance($cmrecord->id)->id,
+            'component' => 'mod_pdfsecure',
+            'filearea' => 'content',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'doc.pdf',
+        ], '%PDF fixture');
+
         $this->assertSame(COMPLETION_INCOMPLETE, $completion->get_state('completionreadall'));
 
         $DB->insert_record('pdfsecure_progress', (object)[
             'pdfsecureid' => $activity->id,
             'userid' => $user->id,
+            'filekey' => 'doc.pdf',
             'pages' => 20,
             'seen' => '1,2,3',
             'timemodified' => time(),

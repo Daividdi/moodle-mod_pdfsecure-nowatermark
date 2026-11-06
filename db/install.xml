@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/pdfsecure/db" VERSION="2026102400" COMMENT="XMLDB file for Moodle mod_pdfsecure"
+<XMLDB PATH="mod/pdfsecure/db" VERSION="2026110600" COMMENT="XMLDB file for Moodle mod_pdfsecure"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -29,6 +29,7 @@
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="pdfsecureid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="PDF Secure activity instance"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="User who read the PDF"/>
+        <FIELD NAME="filekey" TYPE="char" LENGTH="255" NOTNULL="true" DEFAULT="" SEQUENCE="false" COMMENT="Top-level content filename"/>
         <FIELD NAME="pages" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"
             COMMENT="Total pages when last seen"/>
         <FIELD NAME="seen" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Sorted comma-separated distinct page numbers seen"/>
@@ -41,7 +42,7 @@
         <KEY NAME="user_fk" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="pdfsecure_user_uix" UNIQUE="true" FIELDS="pdfsecureid, userid"/>
+        <INDEX NAME="pdfsecure_file_user_uix" UNIQUE="true" FIELDS="pdfsecureid, userid, filekey"/>
       </INDEXES>
     </TABLE>
   </TABLES>

@@ -57,6 +57,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $DB->insert_record('pdfsecure_progress', (object)[
             'pdfsecureid' => $activity->id,
             'userid' => $user->id,
+            'filekey' => 'doc.pdf',
             'pages' => 20,
             'seen' => '1,2,20',
             'timemodified' => time(),
@@ -93,6 +94,15 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $fixture = $this->create_progress_fixture();
         $context = $fixture['context'];
         $user = $fixture['user'];
+        $DB->insert_record('pdfsecure_progress', (object)[
+            'pdfsecureid' => $fixture['activity']->id,
+            'userid' => $user->id,
+            'filekey' => 'second.pdf',
+            'pages' => 10,
+            'seen' => '1,10',
+            'timemodified' => time(),
+            'timecompleted' => time(),
+        ]);
         $this->create_watermarked_file($context, $user->id);
 
         $contexts = provider::get_contexts_for_userid($user->id);
@@ -101,6 +111,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $writer = writer::with_context($context);
         $exported = $writer->get_data([get_string('privacy:exportpath', 'mod_pdfsecure')]);
         $this->assertSame('1,2,20', $exported->seen);
+        $this->assertCount(2, $exported->files);
+        $this->assertSame('second.pdf', $exported->files[1]->filekey);
         $files = $writer->get_files([get_string('privacy:watermarkedpath', 'mod_pdfsecure')]);
         $this->assertCount(1, $files);
 
@@ -136,6 +148,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $DB->insert_record('pdfsecure_progress', (object)[
             'pdfsecureid' => $fixture['activity']->id,
             'userid' => $otheruser->id,
+            'filekey' => 'doc.pdf',
             'pages' => 10,
             'seen' => '1',
             'timemodified' => time(),

@@ -68,5 +68,32 @@ function xmldb_pdfsecure_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026102400, 'pdfsecure');
     }
 
+    if ($oldversion < 2026110600) {
+        $progresstable = new xmldb_table('pdfsecure_progress');
+        $filekeyfield = new xmldb_field('filekey', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, '');
+        if (!$dbman->field_exists($progresstable, $filekeyfield)) {
+            $dbman->add_field($progresstable, $filekeyfield);
+        }
+
+        // Existing progress belonged to the only file the old form could store.
+        // Resolve it by filename so restores do not depend on stored_file IDs.
+        \mod_pdfsecure\local\progress_migration::fill_filekeys();
+
+        $oldindex = new xmldb_index('pdfsecure_user_uix', XMLDB_INDEX_UNIQUE, ['pdfsecureid', 'userid']);
+        if ($dbman->index_exists($progresstable, $oldindex)) {
+            $dbman->drop_index($progresstable, $oldindex);
+        }
+        $newindex = new xmldb_index(
+            'pdfsecure_file_user_uix',
+            XMLDB_INDEX_UNIQUE,
+            ['pdfsecureid', 'userid', 'filekey']
+        );
+        if (!$dbman->index_exists($progresstable, $newindex)) {
+            $dbman->add_index($progresstable, $newindex);
+        }
+
+        upgrade_mod_savepoint(true, 2026110600, 'pdfsecure');
+    }
+
     return true;
 }

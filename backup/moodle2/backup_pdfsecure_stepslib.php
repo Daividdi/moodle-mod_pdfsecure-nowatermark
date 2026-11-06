@@ -28,7 +28,7 @@ class backup_pdfsecure_activity_structure_step extends backup_activity_structure
         ]);
         $progresscontainer = new backup_nested_element('progressrows');
         $progress = new backup_nested_element('progress', ['id'], [
-            'userid', 'pages', 'seen', 'timemodified', 'timecompleted',
+            'userid', 'filekey', 'pages', 'seen', 'timemodified', 'timecompleted',
         ]);
 
         $pdfsecure->add_child($progresscontainer);

@@ -46,6 +46,8 @@ class observer {
      * @return void
      */
     private static function queue_from_event(\core\event\base $event): void {
+        global $CFG;
+
         if (!converter::is_enabled()) {
             return;
         }
@@ -53,6 +55,11 @@ class observer {
         if ($context->contextlevel !== CONTEXT_MODULE) {
             return;
         }
-        converter::queue_coursemodule((int)$context->instanceid);
+        $cmid = (int)$context->instanceid;
+        if (converter::has_pdf($cmid)) {
+            require_once($CFG->dirroot . '/course/lib.php');
+            set_coursemodule_visible($cmid, 0);
+        }
+        converter::queue_coursemodule($cmid);
     }
 }

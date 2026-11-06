@@ -14,8 +14,9 @@ $string['settingonlysecure'] = 'PDFs only as PDF Secure';
 $string['settingonlysecure_desc'] = 'When enabled, blocks PDFs in Moodle File and Folder forms, offers PDF Secure for drag-and-drop PDFs, '
     . 'and converts PDFs created through other paths, including installed PDFProtect activities. Existing activities are kept but hidden after their PDFs are confirmed in PDF Secure. '
     . 'This covers File, Folder and PDFProtect activities; it does not change PDFs in forum posts, assignment submissions, interactive videos or certificates.';
-$string['onlysecurevalidation'] = 'PDFs go in a PDF Secure activity (Add an activity or resource › PDF Secure), which protects them and records how far each person read. Remove the PDF from this File or Folder.';
+$string['onlysecurevalidation'] = 'PDF Secure accepts several PDFs in one activity. Add an activity or resource > PDF Secure, then add all PDFs there. Remove the PDF from this File or Folder.';
 $string['dnduploadpdfsecure'] = 'Create a PDF Secure activity (protected PDF)';
+$string['dnduploadzipsecure'] = 'Create one PDF Secure activity from the PDFs in this ZIP';
 $string['taskconvertplainpdfs'] = 'Convert a source activity PDF to PDF Secure';
 $string['tasksweepplainpdfs'] = 'Sweep supported activities for PDFs';
 
@@ -24,7 +25,7 @@ $string['tasksweepplainpdfs'] = 'Sweep supported activities for PDFs';
 // they were orphans with no setting, no form field and no database column behind
 // them, and once a real stamp switch existed they read like the control for it.
 $string['contentheader'] = 'PDF Document';
-$string['selectfile'] = 'Select the PDF file';
+$string['selectfile'] = 'Select PDF files';
 $string['cannotstamp'] = 'This document could not be prepared for viewing. Please report this to the site administrator.';
 
 // Whether to stamp at all.
@@ -69,9 +70,17 @@ $string['settingmaxsize_desc'] = 'A document is held in memory while it is stamp
     . 'PHP memory limit.';
 
 $string['completionreadall'] = 'Read to the end';
-$string['completionreadall_help'] = 'The learner must view at least 90% of the pages, rounded up, and the last page. '
-    . 'Jumping straight to the last page does not complete this rule.';
-$string['completiondetail:readall'] = 'Read at least 90% of the pages and the last page.';
+$string['completionreadall_help'] = 'A PDF counts as read when the learner views at least 90% of its pages, rounded up, and the last page. '
+    . 'Choose whether that applies to every PDF or any one PDF. Jumping straight to the last page does not complete a PDF.';
+$string['completiondisabled'] = 'Do not track reading';
+$string['completionallfiles'] = 'Read all pages of every PDF';
+$string['completionanyfile'] = 'Read all pages of any one PDF';
+$string['completiondetail:allfiles'] = 'Read at least 90% of the pages and the last page of every PDF.';
+$string['completiondetail:anyfile'] = 'Read at least 90% of the pages and the last page of any one PDF.';
+$string['selectdocument'] = 'Choose a PDF to read.';
+$string['pagesread'] = '{$a->read} of {$a->total} pages read';
+$string['readstatecomplete'] = 'Read';
+$string['readstateincomplete'] = 'Not read yet';
 $string['eventcoursemoduleviewed'] = 'PDF Secure activity viewed';
 
 $string['privacy:exportpath'] = 'PDF reading progress';
@@ -79,6 +88,7 @@ $string['privacy:watermarkedpath'] = 'Watermarked PDF derivatives';
 $string['privacy:metadata:pdfsecure_progress'] = 'PDF Secure stores per-user reading progress for each PDF activity.';
 $string['privacy:metadata:pdfsecure_progress:pdfsecureid'] = 'The activity whose PDF was read.';
 $string['privacy:metadata:pdfsecure_progress:userid'] = 'The user who viewed the pages.';
+$string['privacy:metadata:pdfsecure_progress:filekey'] = 'The PDF filename whose pages were viewed.';
 $string['privacy:metadata:pdfsecure_progress:pages'] = 'The total page count reported by the viewer.';
 $string['privacy:metadata:pdfsecure_progress:seen'] = 'The distinct page numbers reported as viewed.';
 $string['privacy:metadata:pdfsecure_progress:timemodified'] = 'The time when reading progress was last updated.';
@@ -89,3 +99,14 @@ $string['pdfsecure:addinstance'] = 'Add a new PDF Secure activity';
 $string['pdfsecure:view'] = 'View PDF Secure activities';
 $string['errorcannotstamp'] = "This PDF cannot be used: the site could not read it to apply the reader's watermark. It may be password-protected or damaged. Remove the protection or export it again, then upload it.";
 $string['errortoobigtostamp'] = "This PDF is larger than the size the site can watermark for readers. Upload a smaller file, or ask an administrator to raise the limit.";
+$string['cachedef_pagecount'] = 'Page count cache for PDF Secure files';
+$string['errorpagesmismatch'] = 'The page total does not match this PDF. Reload the page.';
+$string['errorpagesnodocument'] = 'This activity has no document to read.';
+$string['errorfileinvalid'] = 'That PDF does not belong to this activity.';
+$string['errorfiletype'] = 'Only PDF files can be added to this activity.';
+$string['errorzipunsupported'] = 'ZIP upload is unavailable because the server does not support ZIP archives.';
+$string['errorzipinvalid'] = 'This ZIP archive could not be read safely.';
+$string['errorzipentry'] = 'The ZIP must contain only top-level PDF files; folders and other file types are not accepted.';
+$string['errorzipencrypted'] = 'Encrypted ZIP entries are not accepted.';
+$string['errorzipsize'] = 'This ZIP exceeds the limit of 50 entries or 500 MB uncompressed.';
+$string['errorzipnovalidpdfs'] = 'The ZIP contains no PDF that can be added to PDF Secure.';

@@ -73,12 +73,14 @@ const waitForDocument = (application) => new Promise((resolve) => {
  * Starts collecting PDF.js page changes and reporting them to Moodle.
  *
  * @param {number} cmid Course module ID.
+ * @param {string} file Stored filename identifying this PDF.
  */
-export const init = async(cmid) => {
-    if (initialised.has(cmid)) {
+export const init = async(cmid, file) => {
+    const instancekey = `${cmid}:${file}`;
+    if (initialised.has(instancekey)) {
         return;
     }
-    initialised.add(cmid);
+    initialised.add(instancekey);
 
     const iframe = document.getElementById('pdf-iframe');
     if (!iframe) {
@@ -126,6 +128,7 @@ export const init = async(cmid) => {
                 methodname: 'mod_pdfsecure_report_pages',
                 args: {
                     cmid,
+                    file,
                     pages: application.pagesCount,
                     seen: batch,
                 },

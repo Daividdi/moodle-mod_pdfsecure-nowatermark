@@ -1632,6 +1632,28 @@ const PDFViewerApplication = {
 exports.PDFViewerApplication = PDFViewerApplication;
 {
   const HOSTED_VIEWER_ORIGINS = ["null", "http://mozilla.github.io", "https://mozilla.github.io"];
+  // mod_pdfsecure: the viewer opens only what view.php links to, the plugin's `stamped` file area through pluginfile.php,
+  // with or without slash arguments. The query is limited too, because pluginfile.php prefers a `file` parameter over the
+  // path, and PHP keeps the last of a repeated one.
+  const isPdfSecureDocument = function (url) {
+    const pluginfile = new URL("../../../../pluginfile.php", window.location.href).pathname;
+    const keys = Array.from(url.searchParams.keys());
+    let path;
+    if (url.pathname.startsWith(`${pluginfile}/`)) {
+      path = url.pathname.slice(pluginfile.length);
+      if (keys.some(key => key !== "pdfsecureview")) {
+        return false;
+      }
+    } else if (url.pathname === pluginfile) {
+      path = url.searchParams.get("file") ?? "";
+      if (keys.filter(key => key === "file").length !== 1 || keys.some(key => key !== "file" && key !== "pdfsecureview")) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    return /^\/\d+\/mod_pdfsecure\/stamped\/0\/[^/\\]+$/.test(path) && !/%2f|%5c|%2e/i.test(path);
+  };
   var validateFileURL = function (file) {
     if (!file) {
       return;
@@ -1644,6 +1666,9 @@ exports.PDFViewerApplication = PDFViewerApplication;
       const fileOrigin = new URL(file, window.location.href).origin;
       if (fileOrigin !== viewerOrigin) {
         throw new Error("file origin does not match viewer's");
+      }
+      if (!isPdfSecureDocument(new URL(file, window.location.href))) {
+        throw new Error("file is not a document issued by this activity");
       }
     } catch (ex) {
       PDFViewerApplication.l10n.get("loading_error").then(msg => {
@@ -3156,7 +3181,7 @@ const defaultOptions = {
     kind: OptionKind.API
   },
   isEvalSupported: {
-    value: true,
+    value: false,
     kind: OptionKind.API
   },
   isOffscreenCanvasSupported: {
@@ -3190,7 +3215,7 @@ const defaultOptions = {
 };
 {
   defaultOptions.defaultUrl = {
-    value: "compressed.tracemonkey-pldi-09.pdf",
+    value: "",
     kind: OptionKind.VIEWER
   };
   defaultOptions.disablePreferences = {

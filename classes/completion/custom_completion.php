@@ -39,12 +39,14 @@ class custom_completion extends \core_completion\activity_custom_completion {
         global $DB;
 
         $this->validate_rule($rule);
-        $timecompleted = $DB->get_field('pdfsecure_progress', 'timecompleted', [
-            'pdfsecureid' => $this->cm->instance,
-            'userid' => $this->userid,
-        ]);
-
-        return !empty($timecompleted) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
+        $mode = (int)$DB->get_field('pdfsecure', 'completionreadall', ['id' => $this->cm->instance]);
+        $context = \context_module::instance($this->cm->id);
+        return \mod_pdfsecure\local\progress_completion::is_complete(
+            $context,
+            (int)$this->cm->instance,
+            (int)$this->userid,
+            $mode
+        ) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
     }
 
     /**
@@ -62,8 +64,14 @@ class custom_completion extends \core_completion\activity_custom_completion {
      * @return array Rule descriptions indexed by rule name.
      */
     public function get_custom_rule_descriptions(): array {
+        global $DB;
+
+        $mode = (int)$DB->get_field('pdfsecure', 'completionreadall', ['id' => $this->cm->instance]);
         return [
-            'completionreadall' => get_string('completiondetail:readall', 'mod_pdfsecure'),
+            'completionreadall' => get_string(
+                $mode === 2 ? 'completiondetail:anyfile' : 'completiondetail:allfiles',
+                'mod_pdfsecure'
+            ),
         ];
     }
 

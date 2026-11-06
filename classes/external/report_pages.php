@@ -46,6 +46,7 @@ class report_pages extends external_api {
             'seen' => new external_multiple_structure(
                 new external_value(PARAM_INT, 'A page number reported as seen')
             ),
+            'file' => new external_value(PARAM_RAW, 'Stored filename in this activity', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -53,11 +54,12 @@ class report_pages extends external_api {
      * Records the reported pages and updates activity completion when applicable.
      *
      * @param int $cmid Course module ID.
-     * @param int $pages Total number of pages in the PDF.
+     * @param int $pages Total number of pages the viewer found; refused unless it matches the stored PDF.
      * @param array $seen Page numbers newly reported by the viewer.
+     * @param string $file Stored filename identifying the PDF being read.
      * @return array Progress summary.
      */
-    public static function execute($cmid, $pages, $seen) {
+    public static function execute($cmid, $pages, $seen, $file = '') {
         global $CFG, $DB, $USER;
 
         require_once($CFG->libdir . '/completionlib.php');
@@ -66,6 +68,7 @@ class report_pages extends external_api {
             'cmid' => $cmid,
             'pages' => $pages,
             'seen' => $seen,
+            'file' => $file,
         ]);
         $cm = get_coursemodule_from_id('pdfsecure', $params['cmid'], 0, false, MUST_EXIST);
         $context = \context_module::instance($cm->id);
@@ -73,7 +76,9 @@ class report_pages extends external_api {
         require_capability('mod/pdfsecure:view', $context);
 
         $activity = $DB->get_record('pdfsecure', ['id' => $cm->instance], '*', MUST_EXIST);
-        $totalpages = max(1, min(5000, (int)$params['pages']));
+        $source = \mod_pdfsecure\local\content_files::resolve($context, (string)$params['file']);
+        $filekey = $source->get_filename();
+        $totalpages = self::total_pages($source, (int)$params['pages']);
         $seenpages = [];
         foreach ($params['seen'] as $pagenumber) {
             $pagenumber = (int)$pagenumber;
@@ -85,6 +90,7 @@ class report_pages extends external_api {
         $existing = $DB->get_record('pdfsecure_progress', [
             'pdfsecureid' => $activity->id,
             'userid' => $USER->id,
+            'filekey' => $filekey,
         ]);
         if ($existing) {
             foreach (explode(',', $existing->seen) as $pagenumber) {
@@ -108,6 +114,7 @@ class report_pages extends external_api {
         $record = (object)[
             'pdfsecureid' => $activity->id,
             'userid' => $USER->id,
+            'filekey' => $filekey,
             'pages' => $totalpages,
             'seen' => implode(',', $seenlist),
             'timemodified' => $now,
@@ -127,6 +134,12 @@ class report_pages extends external_api {
         if (
             $complete && !empty($activity->completionreadall)
                 && $cm->completion == COMPLETION_TRACKING_AUTOMATIC && $completion->is_enabled($cm)
+                && \mod_pdfsecure\local\progress_completion::is_complete(
+                    $context,
+                    (int)$activity->id,
+                    (int)$USER->id,
+                    (int)$activity->completionreadall
+                )
         ) {
             $completion->update_state($cm, COMPLETION_COMPLETE, $USER->id);
         }
@@ -139,6 +152,29 @@ class report_pages extends external_api {
     }
 
     /**
+     * Returns the page total to measure the reader against, refusing a figure the stored PDF contradicts.
+     *
+     * This stops a forged page total, not a forged reading: the pages seen still come from the browser, so someone calling
+     * this function by hand can report every page. Read to the end remains attested by the client.
+     *
+     * @param \stored_file $source Activity PDF.
+     * @param int $reported Total the viewer reported.
+     * @return int Total number of pages.
+     */
+    private static function total_pages(\stored_file $source, int $reported): int {
+        $pages = \mod_pdfsecure\local\watermarker::page_count($source);
+        if ($pages === null) {
+            // Only where stamping is off can such a file reach readers. Refusing would leave them unable to complete it.
+            debugging('pdfsecure: page count unreadable for file ' . $source->get_id() . '; using the viewer\'s', DEBUG_DEVELOPER);
+            return max(1, min(5000, $reported));
+        }
+        if ($reported !== $pages) {
+            throw new \moodle_exception('errorpagesmismatch', 'mod_pdfsecure');
+        }
+        return $pages;
+    }
+
+    /**
      * Describes the result returned to the viewer.
      *
      * @return external_single_structure Return value definition.
@@ -146,7 +182,7 @@ class report_pages extends external_api {
     public static function execute_returns() {
         return new external_single_structure([
             'seen' => new external_value(PARAM_INT, 'Number of distinct pages seen'),
-            'pages' => new external_value(PARAM_INT, 'Clamped total number of pages'),
+            'pages' => new external_value(PARAM_INT, 'Total number of pages'),
             'complete' => new external_value(PARAM_BOOL, 'Whether the read-to-end rule is complete'),
         ]);
     }

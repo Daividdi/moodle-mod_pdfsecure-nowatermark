@@ -21,15 +21,16 @@ final class watermarker_normalize_test extends \advanced_testcase {
     /**
      * Builds a one-page PDF 1.5 whose cross-reference is a stream, as current exporters write.
      *
+     * @param string $label Optional unique comment in the header.
      * @return string
      */
-    private function xref_stream_pdf(): string {
+    private function xref_stream_pdf(string $label = ''): string {
         $objects = [
             1 => '<< /Type /Catalog /Pages 2 0 R >>',
             2 => '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
             3 => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>',
         ];
-        $pdf = "%PDF-1.5\n";
+        $pdf = "%PDF-1.5\n" . ($label === '' ? '' : "% $label\n");
         $rows = "\x00\x00\x00\xff";
         foreach ($objects as $number => $body) {
             $rows .= "\x01" . pack('n', strlen($pdf)) . "\x00";
@@ -40,6 +41,29 @@ final class watermarker_normalize_test extends \advanced_testcase {
         $pdf .= "4 0 obj\n<< /Type /XRef /Size 5 /W [1 2 1] /Root 1 0 R /Length " . strlen($rows)
             . " >>\nstream\n$rows\nendstream\nendobj\nstartxref\n$start\n%%EOF\n";
         return $pdf;
+    }
+
+    /**
+     * Builds a simple one-page PDF with a classic cross-reference table.
+     *
+     * @param string $label Unique page content label.
+     * @return string
+     */
+    private function classic_pdf(string $label): string {
+        $objects = [
+            1 => '<< /Type /Catalog /Pages 2 0 R >>',
+            2 => '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+            3 => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>',
+        ];
+        $pdf = "%PDF-1.4\n% $label\n";
+        $offsets = '';
+        foreach ($objects as $number => $body) {
+            $offsets .= sprintf("%010d 00000 n \n", strlen($pdf));
+            $pdf .= "$number 0 obj\n$body\nendobj\n";
+        }
+        $start = strlen($pdf);
+        return $pdf . "xref\n0 4\n0000000000 65535 f \n$offsets"
+            . "trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n$start\n%%EOF\n";
     }
 
     /**
@@ -82,9 +106,64 @@ final class watermarker_normalize_test extends \advanced_testcase {
         $this->assertStringStartsWith('%PDF-', $first);
         watermarker::render_for($source, $user, (int)$cm->cmid);
 
+        $second = get_file_storage()->create_file_from_string([
+            'contextid' => $source->get_contextid(),
+            'component' => 'mod_pdfsecure',
+            'filearea' => 'content',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'second.pdf',
+        ], $this->xref_stream_pdf('second source'));
+        watermarker::render_for($second, $user, (int)$cm->cmid);
+
         $stored = get_file_storage()->get_area_files($source->get_contextid(), 'mod_pdfsecure',
             watermarker::NORMALIZED_AREA, 0, 'id', false);
-        $this->assertCount(1, $stored);
+        $this->assertCount(2, $stored);
+    }
+
+    /**
+     * The page count of a cross-reference stream PDF comes through the rewritten copy, and is null without Ghostscript.
+     */
+    public function test_page_count_reads_xref_stream_pdf(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        $pathtogs = $CFG->pathtogs ?? '';
+        $CFG->pathtogs = '';
+        [$unreadable] = $this->stored_source($this->xref_stream_pdf() . '% no rewrite');
+        $this->assertNull(watermarker::page_count($unreadable));
+
+        $CFG->pathtogs = is_executable($pathtogs) ? $pathtogs : '/usr/bin/gs';
+        if (!is_executable($CFG->pathtogs)) {
+            $this->markTestSkipped('Ghostscript not available');
+        }
+        [$source] = $this->stored_source($this->xref_stream_pdf());
+        $this->assertSame(1, watermarker::page_count($source));
+    }
+
+    /**
+     * Rebuilding one user's derivative for a changed source key preserves other PDFs.
+     */
+    public function test_cached_derivative_pruning_is_scoped_to_source_file(): void {
+        $this->resetAfterTest();
+        [$source, $cm] = $this->stored_source($this->classic_pdf('first'));
+        $second = get_file_storage()->create_file_from_string([
+            'contextid' => $source->get_contextid(),
+            'component' => 'mod_pdfsecure',
+            'filearea' => 'content',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'second.pdf',
+        ], $this->classic_pdf('second'));
+        $user = $this->getDataGenerator()->create_user();
+
+        watermarker::get_for_user($source, $user, (int)$cm->cmid);
+        watermarker::get_for_user($second, $user, (int)$cm->cmid);
+        set_config('tone', 200, 'mod_pdfsecure');
+        watermarker::get_for_user($source, $user, (int)$cm->cmid);
+
+        $stored = get_file_storage()->get_area_files($source->get_contextid(), 'mod_pdfsecure',
+            watermarker::AREA, $user->id, 'id', false);
+        $this->assertCount(2, $stored);
     }
 
     /**

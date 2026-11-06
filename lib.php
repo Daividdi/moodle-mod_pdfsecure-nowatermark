@@ -57,7 +57,9 @@ function pdfsecure_get_coursemodule_info($coursemodule) {
  */
 function pdfsecure_add_instance($pdfsecure, $mform = null) {
     global $DB;
-    $pdfsecure->completionreadall = !empty($pdfsecure->completionreadall) ? 1 : 0;
+    $pdfsecure->completionreadall = isset($pdfsecure->completionreadall)
+        && in_array((int)$pdfsecure->completionreadall, [1, 2], true)
+            ? (int)$pdfsecure->completionreadall : 0;
     $pdfsecure->timecreated = time();
     $pdfsecure->timemodified = time();
     $pdfsecure->id = $DB->insert_record('pdfsecure', $pdfsecure);
@@ -70,7 +72,7 @@ function pdfsecure_add_instance($pdfsecure, $mform = null) {
             'mod_pdfsecure',
             'content',
             0,
-            ['subdirs' => 0, 'maxfiles' => 1]
+            ['subdirs' => 0, 'maxfiles' => -1]
         );
     }
     return $pdfsecure->id;
@@ -85,7 +87,9 @@ function pdfsecure_add_instance($pdfsecure, $mform = null) {
  */
 function pdfsecure_update_instance($pdfsecure, $mform = null) {
     global $DB;
-    $pdfsecure->completionreadall = !empty($pdfsecure->completionreadall) ? 1 : 0;
+    $pdfsecure->completionreadall = isset($pdfsecure->completionreadall)
+        && in_array((int)$pdfsecure->completionreadall, [1, 2], true)
+            ? (int)$pdfsecure->completionreadall : 0;
     $pdfsecure->timemodified = time();
     $pdfsecure->id = $pdfsecure->instance;
     $DB->update_record('pdfsecure', $pdfsecure);
@@ -98,10 +102,12 @@ function pdfsecure_update_instance($pdfsecure, $mform = null) {
             'mod_pdfsecure',
             'content',
             0,
-            ['subdirs' => 0, 'maxfiles' => 1]
+            ['subdirs' => 0, 'maxfiles' => -1]
         );
-        // Rebuilt on the next view if the new file needs it.
-        get_file_storage()->delete_area_files($context->id, 'mod_pdfsecure', \mod_pdfsecure\local\watermarker::NORMALIZED_AREA);
+        // Rebuilt on next use. Clear derivatives together so removed/changed sources cannot remain stale.
+        $fs = get_file_storage();
+        $fs->delete_area_files($context->id, 'mod_pdfsecure', \mod_pdfsecure\local\watermarker::NORMALIZED_AREA);
+        $fs->delete_area_files($context->id, 'mod_pdfsecure', \mod_pdfsecure\local\watermarker::AREA);
     }
     return true;
 }
@@ -226,6 +232,18 @@ function pdfsecure_coursemodule_validation($mform, $data) {
                 || strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION)) === 'pdf') {
             return ['files' => get_string('onlysecurevalidation', 'mod_pdfsecure')];
         }
+        // A zip of PDFs would hand students the same plain files in one download.
+        if (strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION)) === 'zip') {
+            $entries = $file->list_files(get_file_packer('application/zip'));
+            if ($entries === false) {
+                return ['files' => get_string('onlysecurevalidation', 'mod_pdfsecure')];
+            }
+            foreach ($entries as $entry) {
+                if (strtolower(pathinfo((string)$entry->pathname, PATHINFO_EXTENSION)) === 'pdf') {
+                    return ['files' => get_string('onlysecurevalidation', 'mod_pdfsecure')];
+                }
+            }
+        }
     }
 
     return [];
@@ -239,6 +257,7 @@ function pdfsecure_coursemodule_validation($mform, $data) {
 function pdfsecure_dndupload_register() {
     return ['files' => [
         ['extension' => 'pdf', 'message' => get_string('dnduploadpdfsecure', 'mod_pdfsecure')],
+        ['extension' => 'zip', 'message' => get_string('dnduploadzipsecure', 'mod_pdfsecure')],
     ]];
 }
 
@@ -263,19 +282,30 @@ function pdfsecure_dndupload_handle($uploadinfo) {
         'filepath, filename',
         false
     );
-    $ispdf = false;
+    $zipfile = null;
+    $pdffile = null;
     foreach ($draftfiles as $file) {
-        if ($file->get_mimetype() === 'application/pdf'
-                || strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION)) === 'pdf') {
-            $ispdf = true;
+        $extension = strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION));
+        if ($extension === 'zip') {
+            $zipfile = $file;
+            break;
+        }
+        if ($extension === 'pdf' || $file->get_mimetype() === 'application/pdf') {
+            $pdffile = $file;
             break;
         }
     }
-    if (!$ispdf) {
+    if ($zipfile) {
+        return \mod_pdfsecure\local\zip_upload::handle($uploadinfo, $zipfile);
+    }
+    if (!$pdffile) {
         return 0;
     }
     // Returning 0 makes Moodle report the failed upload, instead of an activity no one can read.
-    if (pdfsecure_stamp_mode() !== 'off' && !\mod_pdfsecure\local\watermarker::can_stamp($file)) {
+    if (pdfsecure_stamp_mode() !== 'off' && (
+            \mod_pdfsecure\local\watermarker::too_big($pdffile)
+                || !\mod_pdfsecure\local\watermarker::can_stamp($pdffile)
+        )) {
         return 0;
     }
 
@@ -286,7 +316,7 @@ function pdfsecure_dndupload_handle($uploadinfo) {
         'mod_pdfsecure',
         'content',
         0,
-        ['subdirs' => 0, 'maxfiles' => 1]
+        ['subdirs' => 0, 'maxfiles' => -1]
     );
 
     $storedfiles = get_file_storage()->get_area_files($context->id, 'mod_pdfsecure', 'content', 0, 'sortorder', false);
@@ -357,21 +387,20 @@ function pdfsecure_pluginfile($course, $cm, $context, $filearea, $args, $forcedo
     // The filename identifies WHICH document; WHO is reading it comes from the
     // session, never from the URL. There is therefore nothing in the address to
     // tamper with in order to obtain a copy stamped with somebody else's name.
-    // Guarded rather than assumed: a request for the area root leaves $args empty,
-    // and array_pop() on that returns null, which clean_param() is not required to
-    // survive on PHP 8.
+    // This route has exactly one filename after the itemid. Reject directory paths
+    // and the area root before resolving the filename against the content area.
     array_shift($args);                 // itemid placeholder, always 0
-    if (empty($args)) {
+    if (count($args) !== 1) {
         return false;
     }
-    $filename = clean_param((string)array_pop($args), PARAM_FILE);
-    if ($filename === '') {
+    $filename = (string)array_pop($args);
+    if ($filename === '' || strpos($filename, '/') !== false || strpos($filename, '\\') !== false) {
         return false;
     }
 
     $fs = get_file_storage();
     $source = $fs->get_file($context->id, 'mod_pdfsecure', 'content', 0, '/', $filename);
-    if (!$source) {
+    if (!$source || !\mod_pdfsecure\local\content_files::is_pdf($source)) {
         return false;
     }
 

@@ -50,6 +50,7 @@ class provider implements core_userlist_provider, metadata_provider, plugin_prov
         $items->add_database_table('pdfsecure_progress', [
             'pdfsecureid' => 'privacy:metadata:pdfsecure_progress:pdfsecureid',
             'userid' => 'privacy:metadata:pdfsecure_progress:userid',
+            'filekey' => 'privacy:metadata:pdfsecure_progress:filekey',
             'pages' => 'privacy:metadata:pdfsecure_progress:pages',
             'seen' => 'privacy:metadata:pdfsecure_progress:seen',
             'timemodified' => 'privacy:metadata:pdfsecure_progress:timemodified',
@@ -118,15 +119,21 @@ class provider implements core_userlist_provider, metadata_provider, plugin_prov
                 continue;
             }
 
-            $progress = $DB->get_record('pdfsecure_progress', [
+            $progresses = $DB->get_records('pdfsecure_progress', [
                 'pdfsecureid' => $activityid,
                 'userid' => $userid,
-            ], 'pages, seen, timemodified, timecompleted');
-            if ($progress) {
-                $progress->timemodified = transform::datetime($progress->timemodified);
-                if (!empty($progress->timecompleted)) {
-                    $progress->timecompleted = transform::datetime($progress->timecompleted);
+            ], 'filekey');
+            if ($progresses) {
+                $exported = [];
+                foreach ($progresses as $progress) {
+                    $progress->timemodified = transform::datetime($progress->timemodified);
+                    if (!empty($progress->timecompleted)) {
+                        $progress->timecompleted = transform::datetime($progress->timecompleted);
+                    }
+                    $exported[] = $progress;
                 }
+                $progress = clone reset($exported);
+                $progress->files = $exported;
                 $writer = writer::with_context($context);
                 $writer->export_data([get_string('privacy:exportpath', 'mod_pdfsecure')], $progress);
             }

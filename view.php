@@ -19,7 +19,23 @@ require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
 require_capability('mod/pdfsecure:view', $context);
 
-$PAGE->set_url('/mod/pdfsecure/view.php', array('id' => $cm->id));
+$pdfs = \mod_pdfsecure\local\content_files::get_pdfs($context);
+$filekey = optional_param('file', '', PARAM_RAW);
+if (!is_string($filekey)) {
+    throw new \moodle_exception('errorfileinvalid', 'mod_pdfsecure');
+}
+$selectedfile = null;
+if ($filekey !== '') {
+    $selectedfile = \mod_pdfsecure\local\content_files::resolve($context, (string)$filekey);
+} else if (count($pdfs) === 1) {
+    $selectedfile = reset($pdfs);
+}
+
+$urlparams = ['id' => $cm->id];
+if ($filekey !== '') {
+    $urlparams['file'] = $filekey;
+}
+$PAGE->set_url('/mod/pdfsecure/view.php', $urlparams);
 $PAGE->set_title(format_string($pdfsecure->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
@@ -35,27 +51,15 @@ $event->trigger();
 
 $completion = new completion_info($course);
 $completion->set_module_viewed($cm);
-
-if (!empty($pdfsecure->completionreadall)) {
-    $PAGE->requires->js_call_amd('mod_pdfsecure/progress', 'init', [$cm->id]);
+if ($selectedfile && !empty($pdfsecure->completionreadall)) {
+    $PAGE->requires->js_call_amd('mod_pdfsecure/progress', 'init', [$cm->id, $selectedfile->get_filename()]);
 }
 
 echo $OUTPUT->header();
 
 echo "<h3>" . format_string($pdfsecure->name) . "</h3>";
 
-$fs = get_file_storage();
-$files = $fs->get_area_files($context->id, 'mod_pdfsecure', 'content', 0, 'id', false);
-
-$file = null;
-foreach ($files as $f) {
-    if (!$f->is_directory()) {
-        $file = $f;
-        break;
-    }
-}
-
-if ($file) {
+if ($selectedfile) {
     // Points at the virtual `stamped` area - the only addressable area this plugin
     // has. Where the site stamps, that area regenerates the document on every request
     // with the reader's identity and the current time, and a document FPDI refuses is
@@ -66,7 +70,7 @@ if ($file) {
     // No itemid either way: the reader's identity comes from the session, so the URL
     // carries nothing worth editing.
     $fileurl = moodle_url::make_pluginfile_url($context->id, 'mod_pdfsecure',
-        'stamped', 0, '/', $file->get_filename());
+        'stamped', 0, '/', $selectedfile->get_filename());
     // The stamped bytes contain the current minute, so the PDF URL must be unique
     // for each page view. Otherwise PDF.js or an intermediary can reuse the previous
     // response even though the pluginfile callback disables shared caching.
@@ -75,7 +79,6 @@ if ($file) {
     
     // Forçando o idioma para Inglês
     $viewerurl = $viewerpath . '?file=' . urlencode($fileurl->out(false)) . '&locale=en-US';
-
     ?>
     <style>
         @media print {
@@ -89,7 +92,7 @@ if ($file) {
     <div style="position: relative; width: 100%; height: 800px; border: 1px solid #ccc;
                 margin-top: 20px; overflow: hidden; user-select: none;">
         
-        <iframe id="pdf-iframe" src="<?php echo $viewerurl; ?>#toolbar=0"
+        <iframe id="pdf-iframe" src="<?php echo s($viewerurl); ?>#toolbar=0"
                 width="100%" height="100%"
                 style="border:none; position: absolute; z-index: 1;"
                 onload="secureIframe()"></iframe>
@@ -185,8 +188,43 @@ if ($file) {
     </script>
     <?php
 
+} else if (count($pdfs) > 1) {
+    global $USER;
+    echo html_writer::tag('p', get_string('selectdocument', 'mod_pdfsecure'));
+    echo html_writer::start_tag('div', ['class' => 'pdfsecure-document-list list-group mb-3']);
+    foreach ($pdfs as $filename => $document) {
+        $progress = $DB->get_record('pdfsecure_progress', [
+            'pdfsecureid' => $pdfsecure->id,
+            'userid' => $USER->id,
+            'filekey' => $filename,
+        ]);
+        $seen = $progress && $progress->seen !== ''
+            ? count(array_filter(explode(',', $progress->seen), static function($page) {
+                return $page !== '';
+            })) : 0;
+        $total = \mod_pdfsecure\local\watermarker::page_count($document);
+        if ($total === null && $progress && (int)$progress->pages > 0) {
+            $total = (int)$progress->pages;
+        }
+        $pages = (object)['read' => $seen, 'total' => $total === null ? '?' : $total];
+        $done = $progress && !empty($progress->timecompleted);
+        $status = $done
+            ? get_string('readstatecomplete', 'mod_pdfsecure')
+            : get_string('readstateincomplete', 'mod_pdfsecure');
+        $link = new moodle_url('/mod/pdfsecure/view.php', ['id' => $cm->id, 'file' => $filename]);
+        $name = html_writer::tag('span', $OUTPUT->pix_icon('f/pdf', '') . ' ' . format_string($filename),
+            ['class' => 'pdfsecure-document-name fw-semibold']);
+        $meta = html_writer::tag('span', get_string('pagesread', 'mod_pdfsecure', $pages),
+            ['class' => 'pdfsecure-document-pages text-muted small me-2']);
+        $meta .= html_writer::tag('span', $status,
+            ['class' => 'pdfsecure-document-state badge ' . ($done ? 'bg-success' : 'bg-secondary')]);
+        $row = $name . html_writer::tag('span', $meta, ['class' => 'text-nowrap']);
+        echo html_writer::link($link, $row, ['class' => 'pdfsecure-document-item list-group-item list-group-item-action'
+            . ' d-flex flex-wrap justify-content-between align-items-center gap-2']);
+    }
+    echo html_writer::end_tag('div');
 } else {
-    echo $OUTPUT->notification("O arquivo PDF não foi encontrado nesta atividade.", 'notifyproblem');
+    echo $OUTPUT->notification(get_string('errorpagesnodocument', 'mod_pdfsecure'), 'notifyproblem');
 }
 
 echo $OUTPUT->footer();

@@ -58,6 +58,7 @@ class restore_pdfsecure_activity_structure_step extends restore_activity_structu
         if (empty($data->userid)) {
             return;
         }
+        $data->filekey = isset($data->filekey) ? $data->filekey : '';
         $data->timemodified = $this->apply_date_offset($data->timemodified);
         if (!empty($data->timecompleted)) {
             $data->timecompleted = $this->apply_date_offset($data->timecompleted);
@@ -75,5 +76,6 @@ class restore_pdfsecure_activity_structure_step extends restore_activity_structu
     protected function after_execute() {
         $this->add_related_files('mod_pdfsecure', 'intro', null);
         $this->add_related_files('mod_pdfsecure', 'content', null);
+        \mod_pdfsecure\local\progress_migration::fill_filekeys((int)$this->get_new_parentid('pdfsecure'));
     }
 }

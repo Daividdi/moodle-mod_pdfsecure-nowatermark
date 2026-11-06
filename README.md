@@ -7,7 +7,7 @@ The watermark can be switched off for sites that already watermark at the endpoi
 see [Turning the watermark off](#turning-the-watermark-off). Everything below
 describes the default, stamping mode.
 
-![Moodle](https://img.shields.io/badge/Moodle-4.5%20%E2%80%93%205.2-orange.svg)
+![Moodle](https://img.shields.io/badge/Moodle-4.5%20%E2%80%93%205.3-orange.svg)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
 **Author:** Daividdi
@@ -61,8 +61,9 @@ This module is the stronger of the two because the mark is in the bytes.
 
 ## How it works
 
-1. A teacher uploads a PDF to the activity as usual. The original is stored
-   untouched and is never served.
+1. A teacher uploads one or more PDFs to the activity as usual, or drags a ZIP
+   containing top-level PDFs onto the course. The original files are stored
+   untouched and are never served.
 2. **On every view**, the plugin renders a personalised copy with
    [FPDI](https://www.setasign.com/products/fpdi/about/) — a tiled diagonal mark
    plus a legible footer stamp — and streams it. Nothing is stored.
@@ -114,6 +115,11 @@ gives a 404, call `watermarker::render_for()` from the CLI and read the exceptio
 **What is still refused:** a password-protected or damaged PDF, a file over the size limit, and any file needing a
 rewrite when Ghostscript is missing. The activity form and drag-and-drop refuse these with a message. A file that
 reaches the viewer anyway fails closed: it is never served unstamped.
+
+**The viewer (v2.3.2).** `pdfjs-drm` is PDF.js 3.11.174, older than the fix for CVE-2024-4367. Two local changes in
+`web/viewer.js` contain it: `isEvalSupported` is off, so glyphs are drawn without compiled code, and the `file`
+parameter accepts only this plugin's `stamped` URLs, so the page cannot be pointed at a PDF from elsewhere on the site.
+Keep both if the viewer is ever replaced.
 
 **Known limitation of the PDF engine:** importing drops annotations, links, bookmarks and form fields. For reading
 material this is usually fine; if your PDFs are interactive forms, test before rolling out.
@@ -221,7 +227,20 @@ plugin quietly diverges from the one under review.
 
 ---
 
-## Completion: reading to the end (v2.2.0)
+## Several PDFs and ZIP uploads (v2.4.0)
+
+One PDF Secure activity can hold several PDFs. With one document, opening the
+activity still opens the protected viewer directly. With several, the activity
+shows each filename, pages read out of the total, and whether that PDF is read.
+Each file opens in the same protected viewer and has separate reading progress.
+
+Dragging a ZIP onto a course creates one PDF Secure activity named after the ZIP.
+The archive must contain only top-level PDF files; nested folders, other file
+types, and encrypted entries are rejected. It is limited to 50 entries and 500 MB
+of total uncompressed data. PDFs that cannot be stamped or exceed the site's stamp
+size limit are skipped; an archive with no valid PDFs fails.
+
+## Completion: reading to the end (v2.2.0; multi-file modes in v2.4.0)
 
 An activity can complete on view, or only when the person has **read the document**:
 at least 90 % of its pages, the last one included. The pdf.js viewer reports the pages
@@ -230,13 +249,21 @@ so scrolling straight to the end reads nothing in between. Progress is kept per 
 (`pdfsecure_progress`), backed up with user data and exported/deleted by the privacy
 API, as are the per-person stamped copies.
 
-What it does not do: the page total comes from the viewer, so someone forging the
-web service call by hand could claim a one-page document. For internal training that
-is an accepted limit; the gamification on top of it (local_escalada) rewards the
-completion like any other.
+What it does not do: prove the reading. Since v2.3.2 the server reads the page total
+from the stored PDF and refuses any other figure, so nobody can claim a one-page
+document. The pages seen still come from the browser, so someone forging the web
+service call by hand can report every page: the signal stays attested by the client.
+For internal training that is an accepted limit; the gamification on top of it
+(local_escalada) rewards the completion like any other.
 
-Switch it on per activity under *Completion conditions → Read to the end*, or for many
-activities at once with Moodle's bulk edit of activity completion.
+If the server cannot read a PDF at all (possible only with stamping off, and a file
+needing a rewrite while Ghostscript is missing), it falls back to the viewer's total for
+that file. Readers can still complete it, and the forged-total check does not apply.
+
+For an activity with several PDFs, choose whether the rule requires reading every
+file or any one file. The 90% and last-page rule applies to each required PDF.
+Switch it on per activity under *Completion conditions → Read to the end*, or for
+many activities at once with Moodle's bulk edit of activity completion.
 
 ---
 

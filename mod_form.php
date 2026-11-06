@@ -16,7 +16,11 @@ class mod_pdfsecure_mod_form extends moodleform_mod {
     public function add_completion_rules() {
         $mform = $this->_form;
         $fieldname = 'completionreadall' . $this->get_suffix();
-        $mform->addElement('checkbox', $fieldname, '', get_string('completionreadall', 'mod_pdfsecure'));
+        $mform->addElement('select', $fieldname, get_string('completionreadall', 'mod_pdfsecure'), [
+            0 => get_string('completiondisabled', 'mod_pdfsecure'),
+            1 => get_string('completionallfiles', 'mod_pdfsecure'),
+            2 => get_string('completionanyfile', 'mod_pdfsecure'),
+        ]);
         $mform->setDefault($fieldname, 0);
         $mform->addHelpButton($fieldname, 'completionreadall', 'mod_pdfsecure');
 
@@ -43,7 +47,8 @@ class mod_pdfsecure_mod_form extends moodleform_mod {
         parent::data_preprocessing($defaultvalues);
         $fieldname = 'completionreadall' . $this->get_suffix();
         if (!array_key_exists($fieldname, $defaultvalues)) {
-            $defaultvalues[$fieldname] = !empty($defaultvalues['completionreadall']) ? 1 : 0;
+            $defaultvalues[$fieldname] = isset($defaultvalues['completionreadall'])
+                ? (int)$defaultvalues['completionreadall'] : 0;
         }
     }
 
@@ -57,12 +62,19 @@ class mod_pdfsecure_mod_form extends moodleform_mod {
     public function validation($data, $files) {
         global $USER;
         $errors = parent::validation($data, $files);
-        if (pdfsecure_stamp_mode() === 'off' || empty($data['pdf_file'])) {
+        if (empty($data['pdf_file'])) {
             return $errors;
         }
         $draft = get_file_storage()->get_area_files(context_user::instance($USER->id)->id, 'user', 'draft',
             $data['pdf_file'], 'id', false);
         foreach ($draft as $file) {
+            if (!\mod_pdfsecure\local\content_files::is_pdf($file)) {
+                $errors['pdf_file'] = get_string('errorfiletype', 'mod_pdfsecure');
+                continue;
+            }
+            if (pdfsecure_stamp_mode() === 'off') {
+                continue;
+            }
             if (\mod_pdfsecure\local\watermarker::too_big($file)) {
                 $errors['pdf_file'] = get_string('errortoobigtostamp', 'mod_pdfsecure');
             } else if (!\mod_pdfsecure\local\watermarker::can_stamp($file)) {
@@ -99,7 +111,7 @@ class mod_pdfsecure_mod_form extends moodleform_mod {
         $mform->addElement('header', 'content', get_string('contentheader', 'mod_pdfsecure'));
         
         $mform->addElement('filemanager', 'pdf_file', get_string('selectfile', 'mod_pdfsecure'), null,
-            array('subdirs' => 0, 'maxbytes' => $CFG->maxbytes, 'maxfiles' => 1,
+            array('subdirs' => 0, 'maxbytes' => $CFG->maxbytes, 'maxfiles' => -1,
                   'accepted_types' => array('.pdf'))
         );
         $mform->addRule('pdf_file', null, 'required', null, 'client');

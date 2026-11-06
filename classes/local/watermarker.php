@@ -136,7 +136,7 @@ class watermarker {
     }
 
     /**
-     * Deletes this user's derivatives that no longer match the current key.
+     * Deletes this user's stale derivative for this source file only.
      *
      * @param \stored_file $source
      * @param int $userid
@@ -146,8 +146,10 @@ class watermarker {
         $fs = get_file_storage();
         $old = $fs->get_area_files($source->get_contextid(), 'mod_pdfsecure', self::AREA,
             $userid, 'id', false);
+        $sourcesuffix = '-' . $source->get_contenthash() . '.pdf';
         foreach ($old as $f) {
-            if ($f->get_filename() !== $keep) {
+            $filename = $f->get_filename();
+            if ($filename !== $keep && substr($filename, -strlen($sourcesuffix)) === $sourcesuffix) {
                 $f->delete();
             }
         }
@@ -241,6 +243,53 @@ class watermarker {
     }
 
     /**
+     * The number of pages in a stored PDF, read on the server.
+     *
+     * Cached by content, so replacing the activity's file needs no invalidation and a reader reporting progress does not
+     * parse the document on every call. A file that could not be read is remembered too: Ghostscript takes seconds.
+     * Once Ghostscript is installed, purge caches for those files to be read again.
+     *
+     * @param \stored_file $source the original uploaded PDF
+     * @return int|null null when neither FPDI nor a Ghostscript rewrite can read it
+     */
+    public static function page_count(\stored_file $source): ?int {
+        $cache = \cache::make('mod_pdfsecure', 'pagecount');
+        $key = $source->get_contenthash();
+        $pages = $cache->get($key);
+        if ($pages === false) {
+            $pages = self::read_page_count($source);
+            $cache->set($key, $pages);
+        }
+        return $pages > 0 ? (int)$pages : null;
+    }
+
+    /**
+     * Reads the page count, through the rewritten copy if FPDI refuses the upload.
+     *
+     * @param \stored_file $source
+     * @return int the page count, 0 when it cannot be read
+     */
+    protected static function read_page_count(\stored_file $source): int {
+        require_once(__DIR__ . '/../../vendor/autoload.php');
+        $path = make_request_directory() . '/source.pdf';
+        $source->copy_content_to($path);
+        try {
+            return (int)(new watermark_pdf())->setSourceFile($path);
+        } catch (\Throwable $e) {
+            $normalized = self::normalized_copy($source);
+            if ($normalized === null) {
+                return 0;
+            }
+        }
+        $normalized->copy_content_to($path);
+        try {
+            return (int)(new watermark_pdf())->setSourceFile($path);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
      * Whether this file is over the size the site agrees to stamp.
      *
      * @param \stored_file $file
@@ -274,8 +323,6 @@ class watermarker {
             return null;
         }
 
-        // The activity's file was replaced, so a copy of the previous one is garbage.
-        $fs->delete_area_files($source->get_contextid(), 'mod_pdfsecure', self::NORMALIZED_AREA, 0);
         try {
             return $fs->create_file_from_pathname([
                 'contextid' => $source->get_contextid(),
