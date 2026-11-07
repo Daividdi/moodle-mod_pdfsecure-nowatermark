@@ -423,6 +423,9 @@ function pdfsecure_pluginfile($course, $cm, $context, $filearea, $args, $forcedo
         return false;
     }
 
+    // Only the viewer request opened by view.php gets the document (see local\view_token).
+    \mod_pdfsecure\local\view_token::require_valid((int)$cm->id, 'mod_pdfsecure', $filename);
+
     if (pdfsecure_stamp_mode() === 'off') {
         // Stamping is off, so the document goes out as uploaded. Note what this does
         // NOT relax: the login, enrolment and capability checks above have already

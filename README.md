@@ -1,5 +1,12 @@
 # PDF Secure (mod_pdfsecure)
 
+**Internal integration API (v2.5.0):** `\mod_pdfsecure\local\protection_api`
+is used by `mod_slidesecure` to normalize and watermark a converted PDF, stream it
+through a component-owned protected endpoint, and merge per-page progress into its
+own table. The calling component remains responsible for login, context and
+capability checks and for resolving files from a strict allow-list; it must never
+expose its source or `normalized` file area through pluginfile.
+
 A Moodle activity module that serves course PDFs through an authenticated route the
 uploaded file itself never has, with a **per-user watermark burned into the file**.
 
@@ -307,3 +314,12 @@ GPL v3 or later, matching Moodle.
 
 Bundled third-party components keep their own licences: PDF.js (Apache 2.0),
 FPDF and FPDI (see `vendor/setasign/`).
+
+## Download protection (v2.5.0)
+
+The protected file is delivered only to the viewer request that `view.php` just opened. Each view gets a random
+token bound to the user, session, activity and file; it expires after 2 minutes and is spent on use (byte-range
+mode when stamping is off allows a few uses). Browsers that send Fetch Metadata must show a same-origin script
+fetch (`Sec-Fetch-Dest: empty`), so pasting the address into a tab, following a link or "save link as" returns
+"not found". `mod_slidesecure` uses the same guard. A screenshot or a phone photo cannot be blocked by any
+browser: the per-user watermark identifies the reader in that case.

@@ -87,10 +87,39 @@ class watermarker {
      * @param \stored_file $source the original uploaded PDF
      * @param \stdClass $user the user the copy is being stamped for
      * @param int $cmid course module id, stamped in so a leak identifies the activity
+     * @param string $component File component whose protected file areas hold any normalization.
      * @return string raw PDF bytes
      */
-    public static function render_for(\stored_file $source, \stdClass $user, int $cmid): string {
-        return self::render($source, $user, $cmid, self::settings());
+    public static function render_for(\stored_file $source, \stdClass $user, int $cmid,
+            string $component = 'mod_pdfsecure'): string {
+        self::validate_component($component);
+        return self::render($source, $user, $cmid, self::settings(), $component);
+    }
+
+    /**
+     * Stores the safe rewritten copy used when FPDI cannot read the source PDF.
+     *
+     * Other activity modules may use this method through protection_api, but must
+     * keep the `normalized` area private behind their own pluginfile allow-list.
+     *
+     * @param \stored_file $source Original or converted PDF.
+     * @param string $component Owning Moodle component for the private derivative.
+     * @return \stored_file|null Rewritten PDF, or null when Ghostscript cannot rewrite it.
+     */
+    public static function normalize_for(\stored_file $source, string $component = 'mod_pdfsecure'): ?\stored_file {
+        self::validate_component($component);
+        return self::normalized_copy($source, $component);
+    }
+
+    /**
+     * Validates a Moodle component name before using it for private file storage.
+     *
+     * @param string $component Moodle component name.
+     */
+    private static function validate_component(string $component): void {
+        if (!preg_match('/^mod_[a-z][a-z0-9_]{0,24}$/D', $component)) {
+            throw new \invalid_parameter_exception('Invalid Moodle component name.');
+        }
     }
 
     /**
@@ -165,7 +194,7 @@ class watermarker {
      * @return string raw PDF
      */
     protected static function render(\stored_file $source, \stdClass $user, int $cmid,
-            array $settings): string {
+            array $settings, string $component = 'mod_pdfsecure'): string {
 
         // Resolved relative to this file on purpose: in the Moodle 5.x split webroot
         // $CFG->dirroot is the public/ directory, not the project root, so building
@@ -185,7 +214,7 @@ class watermarker {
         } catch (\setasign\Fpdi\PdfParser\PdfParserException $e) {
             // Mostly PDF 1.5+ cross-reference streams, which current exporters write and
             // the free FPDI parser refuses. Stamp a rewritten copy instead.
-            $normalized = self::normalized_copy($source);
+            $normalized = self::normalized_copy($source, $component);
             if ($normalized === null) {
                 throw $e;
             }
@@ -252,12 +281,14 @@ class watermarker {
      * @param \stored_file $source the original uploaded PDF
      * @return int|null null when neither FPDI nor a Ghostscript rewrite can read it
      */
-    public static function page_count(\stored_file $source): ?int {
+    public static function page_count(\stored_file $source, string $component = 'mod_pdfsecure',
+            bool $persistnormalized = true): ?int {
+        self::validate_component($component);
         $cache = \cache::make('mod_pdfsecure', 'pagecount');
         $key = $source->get_contenthash();
         $pages = $cache->get($key);
         if ($pages === false) {
-            $pages = self::read_page_count($source);
+            $pages = self::read_page_count($source, $component, $persistnormalized);
             $cache->set($key, $pages);
         }
         return $pages > 0 ? (int)$pages : null;
@@ -269,19 +300,29 @@ class watermarker {
      * @param \stored_file $source
      * @return int the page count, 0 when it cannot be read
      */
-    protected static function read_page_count(\stored_file $source): int {
+    protected static function read_page_count(\stored_file $source, string $component = 'mod_pdfsecure',
+            bool $persistnormalized = true): int {
         require_once(__DIR__ . '/../../vendor/autoload.php');
-        $path = make_request_directory() . '/source.pdf';
+        $dir = make_request_directory();
+        $path = $dir . '/source.pdf';
         $source->copy_content_to($path);
         try {
             return (int)(new watermark_pdf())->setSourceFile($path);
         } catch (\Throwable $e) {
-            $normalized = self::normalized_copy($source);
-            if ($normalized === null) {
-                return 0;
+            if ($persistnormalized) {
+                $normalized = self::normalized_copy($source, $component);
+                if ($normalized === null) {
+                    return 0;
+                }
+                $normalized->copy_content_to($path);
+            } else {
+                $rewritten = $dir . '/out.pdf';
+                if (!self::ghostscript_rewrite($path, $rewritten) || !self::fpdi_reads($rewritten)) {
+                    return 0;
+                }
+                $path = $rewritten;
             }
         }
-        $normalized->copy_content_to($path);
         try {
             return (int)(new watermark_pdf())->setSourceFile($path);
         } catch (\Throwable $e) {
@@ -309,10 +350,10 @@ class watermarker {
      * @param \stored_file $source the original uploaded PDF
      * @return \stored_file|null null when Ghostscript cannot rewrite it
      */
-    protected static function normalized_copy(\stored_file $source): ?\stored_file {
+    protected static function normalized_copy(\stored_file $source, string $component = 'mod_pdfsecure'): ?\stored_file {
         $fs = get_file_storage();
         $name = $source->get_contenthash() . '.pdf';
-        $existing = $fs->get_file($source->get_contextid(), 'mod_pdfsecure', self::NORMALIZED_AREA, 0, '/', $name);
+        $existing = $fs->get_file($source->get_contextid(), $component, self::NORMALIZED_AREA, 0, '/', $name);
         if ($existing) {
             return $existing;
         }
@@ -326,7 +367,7 @@ class watermarker {
         try {
             return $fs->create_file_from_pathname([
                 'contextid' => $source->get_contextid(),
-                'component' => 'mod_pdfsecure',
+                'component' => $component,
                 'filearea'  => self::NORMALIZED_AREA,
                 'itemid'    => 0,
                 'filepath'  => '/',
@@ -335,7 +376,7 @@ class watermarker {
             ], $dir . '/out.pdf');
         } catch (\stored_file_creation_exception $e) {
             // Two first readers at once: the other request stored it.
-            return $fs->get_file($source->get_contextid(), 'mod_pdfsecure', self::NORMALIZED_AREA, 0, '/', $name) ?: null;
+            return $fs->get_file($source->get_contextid(), $component, self::NORMALIZED_AREA, 0, '/', $name) ?: null;
         }
     }
 

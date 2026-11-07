@@ -3526,3 +3526,23 @@ dialog :link {
     display: none;
   }
 }
+
+/* PDF Secure keeps the PDF.js chrome out of the learner-facing viewer from first paint. */
+#print,
+#download,
+#openFile,
+#editorModeButtons,
+#editorModeSeparator,
+#presentationMode,
+#secondaryPrint,
+#secondaryDownload,
+#secondaryOpenFile,
+#secondaryPresentationMode,
+#editorFreeText,
+#editorInk,
+#editorStamp,
+#editorHighlight,
+#editorSignature,
+.editorParamsToolbar {
+  display: none !important;
+}

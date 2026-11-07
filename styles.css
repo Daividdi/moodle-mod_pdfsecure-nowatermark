@@ -2,3 +2,141 @@
 #page-mod-pdfsecure-mod .fp-setauthor {
     display: none;
 }
+
+.pdfsecure-frame-wrap {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    margin-top: .75rem;
+    border: 1px solid #4a4f54;
+    border-radius: .375rem;
+    background: #25282b;
+    scroll-margin-top: 90px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.pdfsecure-toolbar {
+    display: flex;
+    min-height: 44px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    padding: .25rem .5rem;
+    background: #2b2f33;
+}
+
+.pdfsecure-toolbar .btn {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+}
+
+.pdfsecure-toolbar .btn:disabled {
+    opacity: .5;
+}
+
+.pdfsecure-toolbar svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
+.pdfsecure-stage {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    background: #25282b;
+}
+
+.pdfsecure-stage:focus-visible,
+.pdfsecure-toolbar .btn:focus-visible {
+    outline: 3px solid #d24726;
+    outline-offset: -3px;
+}
+
+#pdf-iframe {
+    position: static;
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    border: 0;
+}
+
+.pdfsecure-frame-wrap:fullscreen,
+.pdfsecure-frame-wrap.is-fullscreen {
+    position: fixed;
+    z-index: 1090;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh !important;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+}
+
+.pdfsecure-fullscreen-active {
+    overflow: hidden !important;
+}
+
+@media (max-width: 575.98px) {
+    .pdfsecure-action-label {
+        display: none;
+    }
+}
+
+@media print {
+    html, body, #page, #page-wrapper {
+        display: none !important;
+        visibility: hidden !important;
+    }
+}
+
+/* Own bar, same layout as Secure Presentation. */
+.pdfsecure-toolbar { justify-content: flex-start; gap: .5rem; flex-wrap: wrap; }
+.pdfsecure-nav, .pdfsecure-zoom { display: flex; align-items: center; gap: .35rem; }
+.pdfsecure-counter { min-width: 9ch; text-align: center; color: #f8f9fa; font-weight: 600;
+    font-variant-numeric: tabular-nums; }
+#pdfsecure-fullscreen { margin-inline-start: auto; }
+.pdfsecure-toolbar .btn[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #d24726; }
+@media (max-width: 575.98px) {
+    .pdfsecure-zoom { display: none; }
+}
+
+/* Compact mode: more room for the document (touch screens keep 44px targets). */
+.pdfsecure-toolbar { min-height: 0; padding: .2rem .35rem; gap: .3rem; }
+.pdfsecure-toolbar .btn { min-width: 30px; min-height: 30px; padding: .15rem .45rem; font-size: .8rem; gap: .3rem;
+    line-height: 1.2; }
+.pdfsecure-toolbar svg { width: .95rem; height: .95rem; }
+.pdfsecure-counter { font-size: .8rem; min-width: 7ch; }
+.pdfsecure-zoom .pdfsecure-action-label { display: none; }
+@media (max-width: 1199.98px) { .pdfsecure-toolbar .pdfsecure-action-label { display: none; } }
+@media (pointer: coarse) { .pdfsecure-toolbar .btn { min-width: 44px; min-height: 44px; } }
+/* Less Moodle chrome around the viewer on this page only. */
+#page-mod-pdfsecure-view #region-main { padding: .5rem .75rem; }
+#page-mod-pdfsecure-view .activity-header { margin-bottom: .5rem; padding: .35rem .5rem; }
+#page-mod-pdfsecure-view .page-header-headings h1, #page-mod-pdfsecure-view .page-context-header h1 { font-size: 1.25rem; }
+#page-mod-pdfsecure-view #page-header { margin-bottom: .25rem; padding-top: .25rem; padding-bottom: .25rem; }
+#page-mod-pdfsecure-view .pdfsecure-frame-wrap { margin-top: .25rem; }
+
+/* Theme top fade ends at the header here, so it no longer greys out the viewer bar. */
+body#page-mod-pdfsecure-view::before {
+    height: 4.1rem !important;
+    background: linear-gradient(to bottom, #f9f9fa 88%, rgba(249, 249, 250, 0)) !important;
+}
+body#page-mod-pdfsecure-view.theme-dark::before {
+    background: linear-gradient(to bottom, #14161d 88%, transparent) !important;
+}

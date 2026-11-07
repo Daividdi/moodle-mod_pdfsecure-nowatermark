@@ -95,5 +95,10 @@ function xmldb_pdfsecure_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026110600, 'pdfsecure');
     }
 
+    if ($oldversion < 2026110700) {
+        // v2.5.0 adds the documented mod_slidesecure integration API; no schema change.
+        upgrade_mod_savepoint(true, 2026110700, 'pdfsecure');
+    }
+
     return true;
 }

@@ -1652,7 +1652,7 @@ exports.PDFViewerApplication = PDFViewerApplication;
     } else {
       return false;
     }
-    return /^\/\d+\/mod_pdfsecure\/stamped\/0\/[^/\\]+$/.test(path) && !/%2f|%5c|%2e/i.test(path);
+    return /^\/\d+\/mod_(?:pdfsecure|slidesecure)\/stamped\/0\/[^/\\]+$/.test(path) && !/%2f|%5c|%2e/i.test(path);
   };
   var validateFileURL = function (file) {
     if (!file) {
@@ -2267,36 +2267,8 @@ function webViewerKeyDown(evt) {
         break;
     }
   }
-  if (cmd === 1 || cmd === 8) {
-    switch (evt.keyCode) {
-      case 83:
-        eventBus.dispatch("download", {
-          source: window
-        });
-        handled = true;
-        break;
-      case 79:
-        {
-          eventBus.dispatch("openfile", {
-            source: window
-          });
-          handled = true;
-        }
-        break;
-    }
-  }
   if (cmd === 3 || cmd === 10) {
     switch (evt.keyCode) {
-      case 80:
-        PDFViewerApplication.requestPresentationMode();
-        handled = true;
-        PDFViewerApplication.externalServices.reportTelemetry({
-          type: "buttons",
-          data: {
-            id: "presentationModeKeyboard"
-          }
-        });
-        break;
       case 71:
         if (PDFViewerApplication.appConfig.toolbar) {
           PDFViewerApplication.appConfig.toolbar.pageNumber.select();
@@ -13824,13 +13796,6 @@ function renderProgress(index, total, l10n) {
     progressPerc.textContent = msg;
   });
 }
-window.addEventListener("keydown", function (event) {
-  if (event.keyCode === 80 && (event.ctrlKey || event.metaKey) && !event.altKey && (!event.shiftKey || window.chrome || window.opera)) {
-    window.print();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }
-}, true);
 if ("onbeforeprint" in window) {
   const stopPropagationIfNeeded = function (event) {
     if (event.detail !== "custom") {

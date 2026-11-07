@@ -31,4 +31,11 @@ $definitions = [
         'simplekeys' => true,
         'simpledata' => true,
     ],
+    // Short-lived viewer tokens: the stamped PDF is served only to the viewer request that view.php opened.
+    'viewtokens' => [
+        'mode' => cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'simpledata' => false,
+        'ttl' => 300,
+    ],
 ];
